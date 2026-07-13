@@ -70,6 +70,8 @@ final class DedicatedQueryNetworkInterface implements AdvancedNetworkInterface{
 	/** @var string[] */
 	private array $rawPacketPatterns = [];
 
+	private const MAX_PACKETS_PER_TICK = 32;
+
 	public function __construct(
 		private string $ip,
 		private int $port,
@@ -110,7 +112,11 @@ final class DedicatedQueryNetworkInterface implements AdvancedNetworkInterface{
 			$address = "";
 			$port = 0;
 			$buffer = "";
+			$packetsProcessed = 0;
 			while(true){
+				if($packetsProcessed >= self::MAX_PACKETS_PER_TICK){
+					break;
+				}
 				$bytes = @socket_recvfrom($this->socket, $buffer, 65535, 0, $address, $port);
 				if($bytes !== false){
 					if(isset($this->blockedIps[$address]) && $this->blockedIps[$address] > time()){
@@ -123,6 +129,7 @@ final class DedicatedQueryNetworkInterface implements AdvancedNetworkInterface{
 							break;
 						}
 					}
+					$packetsProcessed++;
 				}else{
 					$errno = socket_last_error($this->socket);
 					if($errno === SOCKET_EWOULDBLOCK){

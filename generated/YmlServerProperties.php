@@ -54,6 +54,7 @@ final class YmlServerProperties{
 	public const AUTO_UPDATER_PREFERRED_CHANNEL = 'auto-updater.preferred-channel';
 	public const AUTO_UPDATER_SUGGEST_CHANNELS = 'auto-updater.suggest-channels';
 	public const CHUNK_GENERATION = 'chunk-generation';
+	public const CHUNK_GENERATION_MAX_NEIGHBOUR_BLOCK_UPDATES_PER_TICK = 'chunk-generation.max-neighbour-block-updates-per-tick';
 	public const CHUNK_GENERATION_POPULATION_QUEUE_SIZE = 'chunk-generation.population-queue-size';
 	public const CHUNK_SENDING = 'chunk-sending';
 	public const CHUNK_SENDING_PER_TICK = 'chunk-sending.per-tick';
@@ -106,6 +107,7 @@ final class YmlServerProperties{
 	public const SETTINGS_SHUTDOWN_MESSAGE = 'settings.shutdown-message';
 	public const TICKS_PER = 'ticks-per';
 	public const TICKS_PER_AUTOSAVE = 'ticks-per.autosave';
+	public const TICKS_PER_AUTO_SAVE_CHUNK_SLICE = 'ticks-per.auto-save-chunk-slice';
 	public const TIMINGS = 'timings';
 	public const TIMINGS_HOST = 'timings.host';
 	public const WORLDS = 'worlds';

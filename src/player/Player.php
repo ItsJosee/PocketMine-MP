@@ -258,6 +258,16 @@ class Player extends Human implements CommandSender, ChunkListener, IPlayer, Nev
 	 */
 	protected array $loadQueue = [];
 	protected int $nextChunkOrderRun = 5;
+	/**
+	 * Chunk position hash captured the last time orderChunks() ran. Used to skip the (O(viewDistance^2)) chunk
+	 * selection spiral when the player hasn't crossed a chunk boundary and no event has flagged a reorder.
+	 */
+	private int $lastOrderedChunkHash = 0;
+	/**
+	 * Set true by anything that requires a full orderChunks() re-evaluation regardless of player position
+	 * (view-distance change, teleport, respawn, or a chunk being marked for resend).
+	 */
+	private bool $chunkOrderDirty = true;
 
 	/** @var true[] */
 	private array $tickingChunks = [];
@@ -648,6 +658,7 @@ class Player extends Human implements CommandSender, ChunkListener, IPlayer, Nev
 		$this->spawnThreshold = (int) (min($this->viewDistance, $this->server->getConfigGroup()->getPropertyInt(YmlServerProperties::CHUNK_SENDING_SPAWN_RADIUS, 4)) ** 2 * M_PI);
 
 		$this->nextChunkOrderRun = 0;
+		$this->chunkOrderDirty = true;
 
 		$this->getNetworkSession()->syncViewAreaRadius($this->viewDistance);
 
@@ -908,7 +919,9 @@ class Player extends Human implements CommandSender, ChunkListener, IPlayer, Nev
 
 							$this->getNetworkSession()->notifyTerrainReady();
 						}
-						(new PlayerPostChunkSendEvent($this, $X, $Z))->call();
+						if(PlayerPostChunkSendEvent::hasHandlers()){
+							(new PlayerPostChunkSendEvent($this, $X, $Z))->call();
+						}
 					});
 				},
 				static function() : void{
@@ -1078,7 +1091,15 @@ class Player extends Human implements CommandSender, ChunkListener, IPlayer, Nev
 	public function doChunkRequests() : void{
 		if($this->nextChunkOrderRun !== PHP_INT_MAX && $this->nextChunkOrderRun-- <= 0){
 			$this->nextChunkOrderRun = PHP_INT_MAX;
-			$this->orderChunks();
+			$currentChunkHash = World::chunkHash(
+				$this->location->getFloorX() >> Chunk::COORD_BIT_SIZE,
+				$this->location->getFloorZ() >> Chunk::COORD_BIT_SIZE
+			);
+			if($this->chunkOrderDirty || $currentChunkHash !== $this->lastOrderedChunkHash){
+				$this->lastOrderedChunkHash = $currentChunkHash;
+				$this->chunkOrderDirty = false;
+				$this->orderChunks();
+			}
 		}
 
 		if(count($this->loadQueue) > 0){
@@ -1400,6 +1421,7 @@ class Player extends Human implements CommandSender, ChunkListener, IPlayer, Nev
 		}elseif(!$this->getWorld()->isInLoadedTerrain($newPos)){
 			$revert = true;
 			$this->nextChunkOrderRun = 0;
+			$this->chunkOrderDirty = true;
 		}
 
 		if(!$revert && $distanceSquared !== 0.0){
@@ -2730,6 +2752,7 @@ class Player extends Human implements CommandSender, ChunkListener, IPlayer, Nev
 
 			$this->resetFallDistance();
 			$this->nextChunkOrderRun = 0;
+			$this->chunkOrderDirty = true;
 			if($this->spawnChunkLoadCount !== -1){
 				$this->spawnChunkLoadCount = 0;
 			}
@@ -2905,6 +2928,7 @@ class Player extends Human implements CommandSender, ChunkListener, IPlayer, Nev
 		if($status === UsedChunkStatus::SENT){
 			$this->usedChunks[$hash] = UsedChunkStatus::NEEDED;
 			$this->nextChunkOrderRun = 0;
+			$this->chunkOrderDirty = true;
 		}
 	}
 

@@ -37,7 +37,10 @@ final class SnoozeAwarePthreadsChannelWriter implements InterThreadChannelWriter
 	){}
 
 	public function write(string $str) : void{
+		$wasEmpty = $this->buffer->count() === 0;
 		$this->buffer[] = $str;
-		$this->notifier->wakeupSleeper();
+		if($wasEmpty){
+			$this->notifier->wakeupSleeper();
+		}
 	}
 }

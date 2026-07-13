@@ -60,6 +60,7 @@ class MemoryManager{
 
 	private int $garbageCollectionPeriod;
 	private int $garbageCollectionTicker = 0;
+	private int $gcTickerIncrement = 1;
 
 	private int $lowMemChunkRadiusOverride;
 
@@ -190,9 +191,11 @@ class MemoryManager{
 			}else{
 				$this->lowMemory = false;
 			}
+
+			$this->gcTickerIncrement = ($this->memoryLimit > 0 && $memory[0] >= (int) ($this->memoryLimit * 3 / 4)) ? 4 : 1;
 		}
 
-		if($this->garbageCollectionPeriod > 0 && ++$this->garbageCollectionTicker >= $this->garbageCollectionPeriod){
+		if($this->garbageCollectionPeriod > 0 && ($this->garbageCollectionTicker += $this->gcTickerIncrement) >= $this->garbageCollectionPeriod){
 			$this->garbageCollectionTicker = 0;
 			$this->triggerGarbageCollector();
 		}else{

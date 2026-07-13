@@ -55,6 +55,11 @@ use function trim;
 
 class WorldManager{
 	public const TICKS_PER_AUTOSAVE = 300 * Server::TARGET_TICKS_PER_SECOND;
+	/**
+	 * Default number of dirty chunks to persist per tick between full autosaves, distributing save cost over time.
+	 * A value <= 0 disables incremental saving (legacy behaviour: chunks only saved on full autosave).
+	 */
+	public const DEFAULT_CHUNK_SAVE_SLICE_BUDGET = 8;
 
 	/**
 	 * @var World[]
@@ -66,6 +71,7 @@ class WorldManager{
 	private bool $autoSave = true;
 	private int $autoSaveTicks = self::TICKS_PER_AUTOSAVE;
 	private int $autoSaveTicker = 0;
+	private int $chunkSaveSliceBudget = self::DEFAULT_CHUNK_SAVE_SLICE_BUDGET;
 
 	public function __construct(
 		private Server $server,
@@ -354,6 +360,10 @@ class WorldManager{
 			if($tickMs >= Server::TARGET_SECONDS_PER_TICK * 1000){
 				$world->getLogger()->debug(sprintf("Tick took too long: %gms (%g ticks)", $tickMs, round($tickMs / (Server::TARGET_SECONDS_PER_TICK * 1000), 2)));
 			}
+
+			if($this->autoSave && $this->chunkSaveSliceBudget > 0 && $this->autoSaveTicker < $this->autoSaveTicks){
+				$world->saveChunkSlice($this->chunkSaveSliceBudget);
+			}
 		}
 
 		if($this->autoSave && ++$this->autoSaveTicker >= $this->autoSaveTicks){
@@ -389,6 +399,18 @@ class WorldManager{
 			throw new \InvalidArgumentException("Autosave ticks must be positive");
 		}
 		$this->autoSaveTicks = $autoSaveTicks;
+	}
+
+	/**
+	 * Returns the per-tick budget of dirty chunks saved incrementally between full autosaves.
+	 * A value <= 0 disables incremental chunk saving.
+	 */
+	public function getChunkSaveSliceBudget() : int{
+		return $this->chunkSaveSliceBudget;
+	}
+
+	public function setChunkSaveSliceBudget(int $budget) : void{
+		$this->chunkSaveSliceBudget = $budget;
 	}
 
 	private function doAutoSave() : void{

@@ -144,13 +144,16 @@ use function ucfirst;
 use const JSON_THROW_ON_ERROR;
 
 class NetworkSession{
-	private const INCOMING_PACKET_BATCH_PER_TICK = 2; //usually max 1 per tick, but transactions arrive separately
-	private const INCOMING_PACKET_BATCH_BUFFER_TICKS = 100; //enough to account for a 5-second lag spike
+	private const INCOMING_PACKET_BATCH_PER_TICK = 2;
+	private const INCOMING_PACKET_BATCH_BUFFER_TICKS = 50;
 
 	private const INCOMING_GAME_PACKETS_PER_TICK = 2;
-	private const INCOMING_GAME_PACKETS_BUFFER_TICKS = 100;
+	private const INCOMING_GAME_PACKETS_BUFFER_TICKS = 50;
 
-	private const INCOMING_PACKET_BATCH_HARD_LIMIT = 300;
+	private const INCOMING_PACKET_BATCH_HARD_LIMIT = 150;
+
+	private const MAX_COMPRESSED_QUEUE_SIZE = 64;
+	private const MAX_OUTGOING_BYTES_PER_TICK = 262144;
 
 	private PacketRateLimiter $packetBatchLimiter;
 	private PacketRateLimiter $gamePacketLimiter;
@@ -191,6 +194,9 @@ class NetworkSession{
 	private \SplQueue $compressedQueue;
 	private bool $forceAsyncCompression = true;
 	private bool $enableCompression = false; //disabled until handshake completed
+
+	private int $outgoingBytesThisTick = 0;
+	private int $outgoingBytesDeferred = 0;
 
 	private int $nextAckReceiptId = 0;
 	/**
@@ -720,6 +726,13 @@ class NetworkSession{
 	private function queueCompressedNoGamePacketFlush(CompressBatchPromise|string $batch, bool $networkFlush = false, array $ackPromises = []) : void{
 		Timings::$playerNetworkSend->startTiming();
 		try{
+			if($this->compressedQueue->count() >= self::MAX_COMPRESSED_QUEUE_SIZE){
+				$this->logger->debug("Compressed queue overflow (" . $this->compressedQueue->count() . "), dropping payload");
+				foreach($ackPromises as $resolver){
+					$resolver->reject();
+				}
+				return;
+			}
 			$this->compressedQueue->enqueue([$batch, $ackPromises, $networkFlush]);
 			if(is_string($batch)){
 				$this->flushCompressedQueue();
@@ -769,6 +782,14 @@ class NetworkSession{
 			$payload = $this->cipher->encrypt($payload);
 			Timings::$playerNetworkSendEncrypt->stopTiming();
 		}
+
+		$payloadLen = strlen($payload);
+		if($this->outgoingBytesThisTick + $payloadLen > self::MAX_OUTGOING_BYTES_PER_TICK){
+			$this->outgoingBytesDeferred += $payloadLen;
+			$this->logger->debug("Outgoing bandwidth throttle reached, deferring " . $payloadLen . " bytes");
+			return;
+		}
+		$this->outgoingBytesThisTick += $payloadLen;
 
 		if(count($ackPromises) > 0){
 			$ackReceiptId = $this->nextAckReceiptId++;
@@ -1397,6 +1418,9 @@ class NetworkSession{
 			$this->dispose();
 			return;
 		}
+
+		$this->outgoingBytesThisTick = 0;
+		$this->outgoingBytesDeferred = 0;
 
 		if($this->info === null){
 			if(time() >= $this->connectTime + 10){

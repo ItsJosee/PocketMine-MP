@@ -656,7 +656,7 @@ abstract class Entity{
 
 		$hasUpdate = false;
 
-		if($this->checkBlockIntersectionsNextTick){
+		if($this->checkBlockIntersectionsNextTick && $this->blocksAround !== []){
 			$this->checkBlockIntersections();
 		}
 		$this->checkBlockIntersectionsNextTick = true;

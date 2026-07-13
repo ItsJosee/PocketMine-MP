@@ -30,7 +30,6 @@ use pocketmine\Server;
 use pocketmine\timings\Timings;
 use function count;
 use function log;
-use function spl_object_id;
 use function strlen;
 
 final class StandardPacketBroadcaster implements PacketBroadcaster{
@@ -54,11 +53,11 @@ final class StandardPacketBroadcaster implements PacketBroadcaster{
 
 		$targetsByCompressor = [];
 		foreach($recipients as $recipient){
-			//TODO: different compressors might be compatible, it might not be necessary to split them up by object
 			$compressor = $recipient->getCompressor();
-			$compressors[spl_object_id($compressor)] = $compressor;
+			$networkId = $compressor->getNetworkId();
+			$compressors[$networkId] ??= $compressor;
 
-			$targetsByCompressor[spl_object_id($compressor)][] = $recipient;
+			$targetsByCompressor[$networkId][] = $recipient;
 		}
 
 		$totalLength = 0;

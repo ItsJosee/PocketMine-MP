@@ -1047,6 +1047,7 @@ class Server{
 			$this->worldManager = new WorldManager($this, Path::join($this->dataPath, "worlds"), $providerManager);
 			$this->worldManager->setAutoSave($this->configGroup->getConfigBool(ServerProperties::AUTO_SAVE, $this->worldManager->getAutoSave()));
 			$this->worldManager->setAutoSaveInterval($this->configGroup->getPropertyInt(Yml::TICKS_PER_AUTOSAVE, $this->worldManager->getAutoSaveInterval()));
+			$this->worldManager->setChunkSaveSliceBudget($this->configGroup->getPropertyInt(Yml::TICKS_PER_AUTO_SAVE_CHUNK_SLICE, WorldManager::DEFAULT_CHUNK_SAVE_SLICE_BUDGET));
 
 			$this->updater = new UpdateChecker($this, $this->configGroup->getPropertyString(Yml::AUTO_UPDATER_HOST, "update.pmmp.io"));
 
@@ -1902,9 +1903,13 @@ class Server{
 			$this->currentTPS = self::TARGET_TICKS_PER_SECOND;
 			$this->currentUse = 0;
 
-			$queryRegenerateEvent = new QueryRegenerateEvent(new QueryInfo($this));
-			$queryRegenerateEvent->call();
-			$this->queryInfo = $queryRegenerateEvent->getQueryInfo();
+			$queryInfo = new QueryInfo($this);
+			if(QueryRegenerateEvent::hasHandlers()){
+				$queryRegenerateEvent = new QueryRegenerateEvent($queryInfo);
+				$queryRegenerateEvent->call();
+				$queryInfo = $queryRegenerateEvent->getQueryInfo();
+			}
+			$this->queryInfo = $queryInfo;
 
 			$this->network->updateName();
 			$this->network->getBandwidthTracker()->rotateAverageHistory();

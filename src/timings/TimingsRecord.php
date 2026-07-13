@@ -90,6 +90,8 @@ final class TimingsRecord{
 	private int $violations = 0;
 	private int $ticksActive = 0;
 	private int $peakTime = 0;
+	private int $startMemory = 0;
+	private int $totalMemoryDelta = 0;
 
 	public function __construct(
 		//I'm not the biggest fan of this cycle, but it seems to be the most effective way to avoid leaking anything.
@@ -125,8 +127,11 @@ final class TimingsRecord{
 
 	public function getPeakTime() : int{ return $this->peakTime; }
 
+	public function getMemoryDelta() : int{ return $this->totalMemoryDelta; }
+
 	public function startTiming(int $now) : void{
 		$this->start = $now;
+		$this->startMemory = memory_get_usage(true);
 		self::$currentRecord = $this;
 	}
 
@@ -148,6 +153,10 @@ final class TimingsRecord{
 		$this->curTickTotal += $diff;
 		++$this->curCount;
 		++$this->count;
+		$memDiff = memory_get_usage(true) - $this->startMemory;
+		if($memDiff !== 0){
+			$this->totalMemoryDelta += $memDiff;
+		}
 		$this->start = 0;
 		if($diff > $this->peakTime){
 			$this->peakTime = $diff;

@@ -70,7 +70,7 @@ network:
   #Compression level used when sending batched packets. Higher = more CPU, less bandwidth usage
   compression-level: 6
   #Use AsyncTasks for compression during the main game session. Increases latency, but may reduce main thread load
-  async-compression: false
+  async-compression: true
   #Threshold for async compression, in bytes. Only packets larger than this will be compressed asynchronously
   #Due to large overhead of AsyncTask, async compression isn't worth it except for large packets
   async-compression-threshold: 10000
@@ -103,7 +103,7 @@ chunk-sending:
   #Amount of chunks sent to players per tick
   per-tick: 4
   #Radius of chunks that need to be sent before spawning the player
-  spawn-radius: 4
+  spawn-radius: 3
 
 chunk-ticking:
   #Radius of chunks around a player to tick
@@ -120,9 +120,16 @@ chunk-ticking:
 chunk-generation:
   #Max. amount of chunks in the waiting queue to be populated
   population-queue-size: 32
+  #Max. amount of neighbour block updates to process per tick. A cap prevents update cascades (e.g. massive liquid
+  #flow, large redstone) from monopolising a tick; excess updates are deferred to future ticks.
+  #A value of 0 or less disables the cap and processes everything each tick (legacy behaviour).
+  max-neighbour-block-updates-per-tick: 10000
 
 ticks-per:
   autosave: 6000
+  #How many dirty chunks to save per tick between full autosaves. Spreads save cost over time instead of one
+  #big freeze when autosave fires. A value of 0 or less disables incremental saving (legacy behaviour).
+  auto-save-chunk-slice: 8
 
 auto-report:
   #Send crash reports for processing

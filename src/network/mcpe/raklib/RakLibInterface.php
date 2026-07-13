@@ -222,7 +222,7 @@ class RakLibInterface implements ServerEventListener, AdvancedNetworkInterface{
 				//intentionally doesn't use logException, we don't want spammy packet error traces to appear in release mode
 				$logger->debug(implode("\n", Utils::printableExceptionInfo($e)));
 
-				$this->interface->blockAddress($address, 5);
+				$this->interface->blockAddress($address, 30);
 			}catch(\Throwable $e){
 				//record the name of the player who caused the crash, to make it easier to find the reproducing steps
 				$this->server->getLogger()->emergency("Crash occurred while handling a packet from session: $name");

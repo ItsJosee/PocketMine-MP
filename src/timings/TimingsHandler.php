@@ -105,19 +105,20 @@ class TimingsHandler{
 
 			$avg = $time / $count;
 
-			$group = $timings->getGroup() . ($threadId !== null ? " ThreadId: $threadId" : "");
-			$groups[$group][] = implode(" ", [
-				$timings->getName(),
-				"Time: $time",
-				"Count: $count",
-				"Avg: $avg",
-				"Violations: " . $timings->getViolations(),
-				"RecordId: " . $timings->getId(),
-				"ParentRecordId: " . ($timings->getParentId() ?? "none"),
-				"TimerId: " . $timings->getTimerId(),
-				"Ticks: " . $timings->getTicksActive(),
-				"Peak: " . $timings->getPeakTime(),
-			]);
+$group = $timings->getGroup() . ($threadId !== null ? " ThreadId: $threadId" : "");
+		$groups[$group][] = implode(" ", [
+			$timings->getName(),
+			"Time: $time",
+			"Count: $count",
+			"Avg: $avg",
+			"Violations: " . $timings->getViolations(),
+			"Memory: " . $timings->getMemoryDelta(),
+			"RecordId: " . $timings->getId(),
+			"ParentRecordId: " . ($timings->getParentId() ?? "none"),
+			"TimerId: " . $timings->getTimerId(),
+			"Ticks: " . $timings->getTicksActive(),
+			"Peak: " . $timings->getPeakTime(),
+		]);
 		}
 		$result = [];
 
@@ -200,6 +201,45 @@ class TimingsHandler{
 
 	public static function isEnabled() : bool{
 		return self::$enabled;
+	}
+
+	/**
+	 * Returns the top CPU and memory hotpaths from the current timings session, sorted by descending time (CPU) and
+	 * descending memory delta respectively.
+	 *
+	 * This is the built-in hotpath detector: callers can use it to automatically identify which subsystems, plugins
+	 * or handlers are consuming the most CPU and allocating the most memory, without parsing the full timings report.
+	 *
+	 * @param int $limit maximum number of entries per list
+	 *
+	 * @return array{time: list<string>, memory: list<string>}
+	 */
+	public static function getHotpaths(int $limit = 10) : array{
+		$byTime = [];
+		$byMemory = [];
+		foreach(TimingsRecord::getAll() as $record){
+			if($record->getCount() === 0){
+				continue;
+			}
+			$byTime[] = $record;
+			$byMemory[] = $record;
+		}
+		usort($byTime, static fn(TimingsRecord $a, TimingsRecord $b) => $b->getTotalTime() <=> $a->getTotalTime());
+		usort($byMemory, static fn(TimingsRecord $a, TimingsRecord $b) => $b->getMemoryDelta() <=> $a->getMemoryDelta());
+
+		$timeLines = [];
+		$memoryLines = [];
+		$top = array_slice($byTime, 0, $limit);
+		foreach($top as $record){
+			$timeLines[] = sprintf("%s: %.2fms (%dx, peak %.2fms)", $record->getName(), $record->getTotalTime() / 1e6, $record->getCount(), $record->getPeakTime() / 1e6);
+		}
+		$topMem = array_slice($byMemory, 0, $limit);
+		foreach($topMem as $record){
+			$bytes = $record->getMemoryDelta();
+			$sign = $bytes >= 0 ? "+" : "";
+			$memoryLines[] = sprintf("%s: %s%s bytes (%dx)", $record->getName(), $sign, number_format($bytes), $record->getCount());
+		}
+		return ["time" => $timeLines, "memory" => $memoryLines];
 	}
 
 	public static function setEnabled(bool $enable = true) : void{
