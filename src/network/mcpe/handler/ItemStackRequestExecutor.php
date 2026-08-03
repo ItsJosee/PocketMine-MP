@@ -103,6 +103,14 @@ class ItemStackRequestExecutor{
 		}
 
 		if(!($clientItemStackId < 0 ? $info->getRequestId() === $clientItemStackId : $info->getStackId() === $clientItemStackId)){
+			//Log detailed info for debugging desync issues
+			$inventoryClass = (new \ReflectionClass($inventory))->getShortName();
+			$this->player->getLogger()->debug("Itemstack ID desync detected in $inventoryClass#" . spl_object_id($inventory) . " slot $slotId");
+			$this->player->getLogger()->debug("Client expected: $clientItemStackId, Server actual: " . $info->getStackId() . ", Last request: " . ($info->getRequestId() ?? "none"));
+
+			//Request full inventory resync to recover from desync state
+			$this->inventoryManager->requestSyncAll();
+
 			throw new ItemStackRequestProcessException(
 				$this->prettyInventoryAndSlot($inventory, $slotId) . ": " .
 				"Mismatched expected itemstack, " .

@@ -2544,6 +2544,13 @@ class World implements ChunkManager{
 			return false;
 		}
 
+		//Additional validation: ensure the item is valid before proceeding
+		//This prevents exploits where modified clients try to place blocks with invalid items
+		if($item->isNull() && $player !== null){
+			$player->getLogger()->debug("Cancelled useItemOn: item is null for player " . $player->getName());
+			return false;
+		}
+
 		if($player !== null){
 			$ev = new PlayerInteractEvent($player, $item, $blockClicked, $clickVector, $face, PlayerInteractEvent::RIGHT_CLICK_BLOCK);
 			if($player->isSneakPressed()){
