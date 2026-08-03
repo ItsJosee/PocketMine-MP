@@ -41,24 +41,6 @@ This is a maintained fork of [PocketMine-MP](https://github.com/pmmp/PocketMine-
 
 This fork is based on the original PocketMine-MP project and follows the same licensing terms (LGPL-3.0).
 
-## Crossbow Project
-**Crossbow** is an experimental project inspired by [Dragonfly](https://github.com/df-mc/dragonfly), a Minecraft Bedrock Edition server software written in Go.
-
-### About Dragonfly
-Dragonfly is a heavily asynchronous server software for Minecraft: Bedrock Edition written in Go. Key features:
-- 🚀 **High Performance** - Written in Go for excellent concurrency
-- 📦 **Library-first Design** - Designed to be used as a library to extend
-- 🔧 **Simple Setup** - Easy to configure and modify
-- 🌐 **Scalable Architecture** - Built with scalability in mind
-
-### Crossbow Goals
-Crossbow aims to:
-- Port Dragonfly concepts to PHP/PocketMine-MP ecosystem
-- Experiment with hybrid approaches
-- Provide alternative server solutions
-
-For more information about Dragonfly, visit: https://github.com/df-mc/dragonfly
-
 ## :x: PocketMine-MP is NOT a vanilla Minecraft server software.
 **It is poorly suited to hosting vanilla survival servers.**
 It doesn't have many features from the vanilla game, such as vanilla world generation, redstone, mob AI, and various other things.
