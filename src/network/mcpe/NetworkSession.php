@@ -197,6 +197,9 @@ class NetworkSession{
 
 	private int $outgoingBytesThisTick = 0;
 	private int $outgoingBytesDeferred = 0;
+	/** @var array<array{string, bool, list<PromiseResolver<true>>}> */
+	private array $deferredPayloadQueue = [];
+	private const MAX_DEFERRED_QUEUE_SIZE = 32;
 
 	private int $nextAckReceiptId = 0;
 	/**
@@ -215,6 +218,24 @@ class NetworkSession{
 
 	private string $noisyPacketBuffer = "";
 	private int $noisyPacketsDropped = 0;
+	/** @var string[] */
+	private array $noisyPacketRingBuffer = [];
+	private int $noisyPacketRingIndex = 0;
+	private const NOISY_PACKET_RING_SIZE = 4;
+
+	/** @var array<string, array<int, int>> packet class => [hash => tick] */
+	private array $recentSentPacketHashes = [];
+	private int $duplicatePacketsDropped = 0;
+	private const PACKET_DEDUP_WINDOW_TICKS = 3;
+	private const DEDUP_MAX_HASHES = 8;
+
+	private const DEDUP_PACKET_TYPES = [
+		\pocketmine\network\mcpe\protocol\SetActorDataPacket::class => true,
+		\pocketmine\network\mcpe\protocol\SetActorMotionPacket::class => true,
+		\pocketmine\network\mcpe\protocol\MoveActorAbsolutePacket::class => true,
+		\pocketmine\network\mcpe\protocol\UpdateAttributesPacket::class => true,
+		\pocketmine\network\mcpe\protocol\LevelChunkPacket::class => true,
+	];
 
 	public function __construct(
 		private Server $server,
@@ -380,11 +401,23 @@ class NetworkSession{
 			$this->noisyPacketsDropped++;
 			return true;
 		}
-		//stop filtering once we see a packet with a different buffer
-		//this won't be any good for interleaved spammy packets, but we haven't seen any of those so far, and this
-		//is the simplest and most conservative filter we can do
-		$this->noisyPacketBuffer = "";
+
+		foreach($this->noisyPacketRingBuffer as $recent){
+			if($buffer === $recent){
+				$this->noisyPacketsDropped++;
+				return true;
+			}
+		}
+
+		$this->noisyPacketBuffer = $buffer;
 		$this->noisyPacketsDropped = 0;
+
+		if(count($this->noisyPacketRingBuffer) < self::NOISY_PACKET_RING_SIZE){
+			$this->noisyPacketRingBuffer[] = $buffer;
+		}else{
+			$this->noisyPacketRingBuffer[$this->noisyPacketRingIndex] = $buffer;
+			$this->noisyPacketRingIndex = ($this->noisyPacketRingIndex + 1) % self::NOISY_PACKET_RING_SIZE;
+		}
 
 		return false;
 	}
@@ -615,8 +648,33 @@ class NetworkSession{
 			}
 			$writer = new ByteBufferWriter();
 			foreach($packets as $evPacket){
-				$writer->clear(); //memory reuse let's gooooo
-				$this->addToSendBuffer(self::encodePacketTimed($writer, $evPacket));
+				$writer->clear();
+				$encoded = self::encodePacketTimed($writer, $evPacket);
+				
+				$packetClass = get_class($evPacket);
+				if(isset(self::DEDUP_PACKET_TYPES[$packetClass])){
+					$hash = crc32($encoded);
+					if(isset($this->recentSentPacketHashes[$packetClass][$hash])){
+						$this->duplicatePacketsDropped++;
+						continue;
+					}
+					$this->recentSentPacketHashes[$packetClass][$hash] = $this->server->getTick();
+					if(count($this->recentSentPacketHashes[$packetClass]) > self::DEDUP_MAX_HASHES){
+						$oldest = null;
+						$oldestHash = null;
+						foreach($this->recentSentPacketHashes[$packetClass] as $h => $tick){
+							if($oldest === null || $tick < $oldest){
+								$oldest = $tick;
+								$oldestHash = $h;
+							}
+						}
+						if($oldestHash !== null){
+							unset($this->recentSentPacketHashes[$packetClass][$oldestHash]);
+						}
+					}
+				}
+				
+				$this->addToSendBuffer($encoded);
 			}
 			if($immediate){
 				$this->flushGamePacketQueue();
@@ -786,7 +844,14 @@ class NetworkSession{
 		$payloadLen = strlen($payload);
 		if($this->outgoingBytesThisTick + $payloadLen > self::MAX_OUTGOING_BYTES_PER_TICK){
 			$this->outgoingBytesDeferred += $payloadLen;
-			$this->logger->debug("Outgoing bandwidth throttle reached, deferring " . $payloadLen . " bytes");
+			if(count($this->deferredPayloadQueue) < self::MAX_DEFERRED_QUEUE_SIZE){
+				$this->deferredPayloadQueue[] = [$payload, $immediate, $ackPromises];
+			}else{
+				$this->logger->debug("Outgoing bandwidth throttle reached, deferred queue full, dropping " . $payloadLen . " bytes");
+				foreach($ackPromises as $resolver){
+					$resolver->reject();
+				}
+			}
 			return;
 		}
 		$this->outgoingBytesThisTick += $payloadLen;
@@ -1422,6 +1487,26 @@ class NetworkSession{
 		$this->outgoingBytesThisTick = 0;
 		$this->outgoingBytesDeferred = 0;
 
+		if(count($this->deferredPayloadQueue) > 0){
+			$queue = $this->deferredPayloadQueue;
+			$this->deferredPayloadQueue = [];
+			foreach($queue as [$payload, $immediate, $ackPromises]){
+				$payloadLen = strlen($payload);
+				if($this->outgoingBytesThisTick + $payloadLen > self::MAX_OUTGOING_BYTES_PER_TICK){
+					$this->deferredPayloadQueue[] = [$payload, $immediate, $ackPromises];
+					continue;
+				}
+				$this->outgoingBytesThisTick += $payloadLen;
+				if(count($ackPromises) > 0){
+					$ackReceiptId = $this->nextAckReceiptId++;
+					$this->ackPromisesByReceiptId[$ackReceiptId] = $ackPromises;
+				}else{
+					$ackReceiptId = null;
+				}
+				$this->sender->send($payload, $immediate, $ackReceiptId);
+			}
+		}
+
 		if($this->info === null){
 			if(time() >= $this->connectTime + 10){
 				$this->disconnectWithError(KnownTranslationFactory::pocketmine_disconnect_error_loginTimeout());
@@ -1434,11 +1519,11 @@ class NetworkSession{
 			$this->player->doChunkRequests();
 
 			$dirtyAttributes = $this->player->getAttributeMap()->needSend();
-			$this->entityEventBroadcaster->syncAttributes([$this], $this->player, $dirtyAttributes);
-			foreach($dirtyAttributes as $attribute){
-				//TODO: we might need to send these to other players in the future
-				//if that happens, this will need to become more complex than a flag on the attribute itself
-				$attribute->markSynchronized();
+			if(count($dirtyAttributes) > 0){
+				$this->entityEventBroadcaster->syncAttributes([$this], $this->player, $dirtyAttributes);
+				foreach($dirtyAttributes as $attribute){
+					$attribute->markSynchronized();
+				}
 			}
 		}
 		Timings::$playerNetworkSendInventorySync->startTiming();

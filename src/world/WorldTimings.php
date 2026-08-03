@@ -52,9 +52,17 @@ class WorldTimings{
 
 	public TimingsHandler $syncDataSave;
 	public TimingsHandler $syncChunkSave;
+	public TimingsHandler $asyncChunkSave;
 
 	public TimingsHandler $chunkPopulationOrder;
 	public TimingsHandler $chunkPopulationCompletion;
+
+	public TimingsHandler $entityTickPlayerEntities;
+	public TimingsHandler $entityTickNonPlayerEntities;
+	public TimingsHandler $entityTickCleanup;
+	public TimingsHandler $batchedLightPopulation;
+	public TimingsHandler $blockUpdateBatching;
+	public TimingsHandler $chunkGCTick;
 
 	/**
 	 * @var TimingsHandler[]
@@ -96,8 +104,16 @@ class WorldTimings{
 
 		$this->syncDataSave = self::newTimer($name, "Data Save");
 		$this->syncChunkSave = self::newTimer($name, "Chunk Save");
+		$this->asyncChunkSave = self::newTimer($name, "Async Chunk Save");
 
 		$this->chunkPopulationOrder = self::newTimer($name, "Chunk Population - Order");
 		$this->chunkPopulationCompletion = self::newTimer($name, "Chunk Population - Completion");
+
+		$this->entityTickPlayerEntities = self::newTimer($name, "Entity Tick - Players");
+		$this->entityTickNonPlayerEntities = self::newTimer($name, "Entity Tick - Non-Players");
+		$this->entityTickCleanup = self::newTimer($name, "Entity Tick - Cleanup");
+		$this->batchedLightPopulation = self::newTimer($name, "Batched Light Population");
+		$this->blockUpdateBatching = self::newTimer($name, "Block Update Batching");
+		$this->chunkGCTick = self::newTimer($name, "Chunk GC Tick");
 	}
 }

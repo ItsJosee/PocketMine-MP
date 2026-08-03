@@ -59,8 +59,8 @@ final class WorldDataVersions{
 	public const LAST_OPENED_IN = [
 		1, //major
 		26, //minor
-		0, //patch
-		2, //revision
+		30, //patch
+		0, //revision
 		0 //is beta
 	];
 }

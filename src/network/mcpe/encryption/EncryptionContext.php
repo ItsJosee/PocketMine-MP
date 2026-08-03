@@ -26,7 +26,9 @@ namespace pocketmine\network\mcpe\encryption;
 use Crypto\Cipher;
 use pmmp\encoding\LE;
 use function bin2hex;
-use function openssl_digest;
+use function hash_final;
+use function hash_init;
+use function hash_update;
 use function openssl_error_string;
 use function strlen;
 use function substr;
@@ -104,9 +106,13 @@ class EncryptionContext{
 	}
 
 	private function calculateChecksum(int $counter, string $payload) : string{
-		$hash = openssl_digest(LE::packUnsignedLong($counter) . $payload . $this->key, self::CHECKSUM_ALGO, true);
+		$ctx = hash_init(self::CHECKSUM_ALGO);
+		hash_update($ctx, LE::packUnsignedLong($counter));
+		hash_update($ctx, $payload);
+		hash_update($ctx, $this->key);
+		$hash = hash_final($ctx, true);
 		if($hash === false){
-			throw new \RuntimeException("openssl_digest() error: " . openssl_error_string());
+			throw new \RuntimeException("hash_final() error");
 		}
 		return substr($hash, 0, 8);
 	}

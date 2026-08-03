@@ -1019,6 +1019,7 @@ class Player extends Human implements CommandSender, ChunkListener, IPlayer, Nev
 		$newOrder = [];
 		$tickingChunks = [];
 		$unloadChunks = $this->usedChunks;
+		$newChunksCount = 0;
 
 		$world = $this->getWorld();
 		$tickingChunkRadius = $world->getChunkTickRadius();
@@ -1028,7 +1029,10 @@ class Player extends Human implements CommandSender, ChunkListener, IPlayer, Nev
 			$this->location->getFloorX() >> Chunk::COORD_BIT_SIZE,
 			$this->location->getFloorZ() >> Chunk::COORD_BIT_SIZE
 		) as $radius => $hash){
-			if(!isset($this->usedChunks[$hash]) || $this->usedChunks[$hash] === UsedChunkStatus::NEEDED){
+			if(!isset($this->usedChunks[$hash])){
+				$newOrder[$hash] = true;
+				$newChunksCount++;
+			}elseif($this->usedChunks[$hash] === UsedChunkStatus::NEEDED){
 				$newOrder[$hash] = true;
 			}
 			if($radius < $tickingChunkRadius){
@@ -1037,6 +1041,7 @@ class Player extends Human implements CommandSender, ChunkListener, IPlayer, Nev
 			unset($unloadChunks[$hash]);
 		}
 
+		$unloadCount = count($unloadChunks);
 		foreach($unloadChunks as $index => $status){
 			World::getXZ($index, $X, $Z);
 			$this->unloadChunk($X, $Z);
@@ -1047,7 +1052,7 @@ class Player extends Human implements CommandSender, ChunkListener, IPlayer, Nev
 		$this->updateTickingChunkRegistrations($this->tickingChunks, $tickingChunks);
 		$this->tickingChunks = $tickingChunks;
 
-		if(count($this->loadQueue) > 0 || count($unloadChunks) > 0){
+		if($newChunksCount > 0 || $unloadCount > 0){
 			$this->getNetworkSession()->syncViewAreaCenterPoint($this->location, $this->viewDistance);
 		}
 

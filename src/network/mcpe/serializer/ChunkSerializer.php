@@ -39,6 +39,8 @@ use pocketmine\world\format\SubChunk;
 use function count;
 
 final class ChunkSerializer{
+	private static array $blockStateNbtCache = [];
+
 	private function __construct(){
 		//NOOP
 	}
@@ -132,13 +134,15 @@ final class ChunkSerializer{
 			if($persistentBlockStates){
 				$nbtSerializer = new NetworkNbtSerializer();
 				foreach($palette as $p){
-					//TODO: introduce a binary cache for this
-					$state = $blockStateDictionary->generateDataFromStateId($blockTranslator->internalIdToNetworkId($p));
-					if($state === null){
-						$state = $blockTranslator->getFallbackStateData();
+					$networkId = $blockTranslator->internalIdToNetworkId($p);
+					if(!isset(self::$blockStateNbtCache[$networkId])){
+						$state = $blockStateDictionary->generateDataFromStateId($networkId);
+						if($state === null){
+							$state = $blockTranslator->getFallbackStateData();
+						}
+						self::$blockStateNbtCache[$networkId] = $nbtSerializer->write(new TreeRoot($state->toNbt()));
 					}
-
-					$stream->writeByteArray($nbtSerializer->write(new TreeRoot($state->toNbt())));
+					$stream->writeByteArray(self::$blockStateNbtCache[$networkId]);
 				}
 			}else{
 				//we would use writeSignedIntArray() here, but the gains of writing in batch are negated by the cost of

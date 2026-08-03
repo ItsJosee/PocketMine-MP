@@ -79,8 +79,10 @@ use pocketmine\player\Player;
 use pocketmine\promise\Promise;
 use pocketmine\promise\PromiseResolver;
 use pocketmine\scheduler\AsyncPool;
+use pocketmine\scheduler\AsyncChunkSaveTask;
 use pocketmine\Server;
 use pocketmine\ServerConfigGroup;
+use pocketmine\thread\NonThreadSafeValue;
 use pocketmine\utils\AssumptionFailedError;
 use pocketmine\utils\Limits;
 use pocketmine\utils\ReversePriorityQueue;
@@ -100,6 +102,7 @@ use pocketmine\world\generator\executor\GeneratorExecutorSetupParameters;
 use pocketmine\world\generator\executor\SyncGeneratorExecutor;
 use pocketmine\world\generator\GeneratorManager;
 use pocketmine\world\generator\PopulationTask;
+use pocketmine\world\light\BatchedLightPopulationTask;
 use pocketmine\world\light\BlockLightUpdate;
 use pocketmine\world\light\LightPopulationTask;
 use pocketmine\world\light\SkyLightUpdate;
@@ -325,6 +328,14 @@ class World implements ChunkManager{
 	 */
 	private array $neighbourBlockUpdateQueueIndex = [];
 
+	/** @phpstan-var \SplQueue<int> */
+	private \SplQueue $redstoneUpdateQueue;
+	/**
+	 * @var true[] blockhash => dummy
+	 * @phpstan-var array<BlockPosHash, true>
+	 */
+	private array $redstoneUpdateQueueIndex = [];
+
 	/**
 	 * @var bool[] chunkHash => isValid
 	 * @phpstan-var array<ChunkPosHash, bool>
@@ -390,6 +401,9 @@ class World implements ChunkManager{
 
 	private ?BlockLightUpdate $blockLightUpdate = null;
 	private ?SkyLightUpdate $skyLightUpdate = null;
+
+	private array $pendingLightPopulation = [];
+	private int $lightPopulationBatchSize = 4;
 
 	private \Logger $logger;
 
@@ -552,6 +566,7 @@ class World implements ChunkManager{
 		$this->scheduledBlockUpdateQueue->setExtractFlags(\SplPriorityQueue::EXTR_BOTH);
 
 		$this->neighbourBlockUpdateQueue = new \SplQueue();
+		$this->redstoneUpdateQueue = new \SplQueue();
 
 		$this->time = $this->provider->getWorldData()->getTime();
 
@@ -1034,15 +1049,41 @@ class World implements ChunkManager{
 		$this->timings->neighbourBlockUpdates->stopTiming();
 
 		$this->timings->entityTick->startTiming();
-		//Update entities that need update
+		$this->timings->entityTickCleanup->startTiming();
+		$toRemove = [];
 		foreach($this->updateEntities as $id => $entity){
-			if($entity->isClosed() || $entity->isFlaggedForDespawn() || !$entity->onUpdate($currentTick)){
-				unset($this->updateEntities[$id]);
-			}
-			if($entity->isFlaggedForDespawn()){
-				$entity->close();
+			if($entity->isClosed() || $entity->isFlaggedForDespawn()){
+				$toRemove[] = $id;
+				if($entity->isFlaggedForDespawn()){
+					$entity->close();
+				}
 			}
 		}
+		foreach($toRemove as $id){
+			unset($this->updateEntities[$id]);
+		}
+		$this->timings->entityTickCleanup->stopTiming();
+
+		$this->timings->entityTickPlayerEntities->startTiming();
+		foreach($this->players as $id => $player){
+			if(isset($this->updateEntities[$id])){
+				if(!$player->onUpdate($currentTick)){
+					unset($this->updateEntities[$id]);
+				}
+			}
+		}
+		$this->timings->entityTickPlayerEntities->stopTiming();
+
+		$this->timings->entityTickNonPlayerEntities->startTiming();
+		foreach($this->updateEntities as $id => $entity){
+			if($entity instanceof Player){
+				continue;
+			}
+			if(!$entity->onUpdate($currentTick)){
+				unset($this->updateEntities[$id]);
+			}
+		}
+		$this->timings->entityTickNonPlayerEntities->stopTiming();
 		$this->timings->entityTick->stopTiming();
 
 		$this->timings->randomChunkUpdates->startTiming();
@@ -1053,27 +1094,31 @@ class World implements ChunkManager{
 
 		if(count($this->changedBlocks) > 0){
 			if(count($this->players) > 0){
+				$this->timings->blockUpdateBatching->startTiming();
 				foreach($this->changedBlocks as $index => $blocks){
-					if(count($blocks) === 0){ //blocks can be set normally and then later re-set with direct send
+					if(count($blocks) === 0){
 						continue;
 					}
 					World::getXZ($index, $chunkX, $chunkZ);
 					if(!$this->isChunkLoaded($chunkX, $chunkZ)){
-						//a previous chunk may have caused this one to be unloaded by a ChunkListener
 						continue;
 					}
-					if(count($blocks) > 512){
+					$batchSize = count($blocks);
+					if($batchSize > 512){
 						foreach(array_chunk($blocks, 512) as $batch){
-							foreach($this->createBlockUpdatePackets($batch) as $packet){
+							$packets = $this->createBlockUpdatePackets($batch);
+							foreach($packets as $packet){
 								$this->broadcastPacketToPlayersUsingChunk($chunkX, $chunkZ, $packet);
 							}
 						}
 					}else{
-						foreach($this->createBlockUpdatePackets($blocks) as $packet){
+						$packets = $this->createBlockUpdatePackets($blocks);
+						foreach($packets as $packet){
 							$this->broadcastPacketToPlayersUsingChunk($chunkX, $chunkZ, $packet);
 						}
 					}
 				}
+				$this->timings->blockUpdateBatching->stopTiming();
 			}
 
 			$this->changedBlocks = [];
@@ -1093,6 +1138,10 @@ class World implements ChunkManager{
 		}
 
 		$this->packetBuffersByChunk = [];
+
+		if(count($this->pendingLightPopulation) > 0){
+			$this->flushBatchedLightPopulation();
+		}
 	}
 
 	public function checkSleep() : void{
@@ -1391,33 +1440,85 @@ class World implements ChunkManager{
 		if($lightPopulatedState === false){
 			$this->chunks[$chunkHash]->setLightPopulated(null);
 			$this->markTickingChunkForRecheck($chunkX, $chunkZ);
-
-			$this->workerPool->submitTask(new LightPopulationTask(
-				$this->chunks[$chunkHash],
-				function(array $blockLight, array $skyLight, array $heightMap) use ($chunkX, $chunkZ) : void{
-					/**
-					 * TODO: phpstan can't infer these types yet :(
-					 * @phpstan-var array<int, LightArray> $blockLight
-					 * @phpstan-var array<int, LightArray> $skyLight
-					 * @phpstan-var non-empty-list<int>    $heightMap
-					 */
-					if($this->unloaded || ($chunk = $this->getChunk($chunkX, $chunkZ)) === null || $chunk->isLightPopulated() === true){
-						return;
-					}
-					//TODO: calculated light information might not be valid if the terrain changed during light calculation
-
-					$chunk->setHeightMapArray($heightMap);
-					foreach($blockLight as $y => $lightArray){
-						$chunk->getSubChunk($y)->setBlockLightArray($lightArray);
-					}
-					foreach($skyLight as $y => $lightArray){
-						$chunk->getSubChunk($y)->setBlockSkyLightArray($lightArray);
-					}
-					$chunk->setLightPopulated(true);
-					$this->markTickingChunkForRecheck($chunkX, $chunkZ);
-				}
-			));
+			$this->pendingLightPopulation[$chunkHash] = [$chunkX, $chunkZ];
+			if(count($this->pendingLightPopulation) >= $this->lightPopulationBatchSize){
+				$this->flushBatchedLightPopulation();
+			}
 		}
+	}
+
+	private function flushBatchedLightPopulation() : void{
+		if(count($this->pendingLightPopulation) === 0){
+			return;
+		}
+		$this->timings->batchedLightPopulation->startTiming();
+		$batch = $this->pendingLightPopulation;
+		$this->pendingLightPopulation = [];
+		if(count($batch) === 1){
+			foreach($batch as [$chunkX, $chunkZ]){
+				$chunkHash = World::chunkHash($chunkX, $chunkZ);
+				if(!isset($this->chunks[$chunkHash]) || $this->chunks[$chunkHash]->isLightPopulated() === true){
+					continue;
+				}
+				$this->workerPool->submitTask(new LightPopulationTask(
+					$this->chunks[$chunkHash],
+					function(array $blockLight, array $skyLight, array $heightMap) use ($chunkX, $chunkZ) : void{
+						if($this->unloaded || ($chunk = $this->getChunk($chunkX, $chunkZ)) === null || $chunk->isLightPopulated() === true){
+							return;
+						}
+						$chunk->setHeightMapArray($heightMap);
+						foreach($blockLight as $y => $lightArray){
+							$chunk->getSubChunk($y)->setBlockLightArray($lightArray);
+						}
+						foreach($skyLight as $y => $lightArray){
+							$chunk->getSubChunk($y)->setBlockSkyLightArray($lightArray);
+						}
+						$chunk->setLightPopulated(true);
+						$this->markTickingChunkForRecheck($chunkX, $chunkZ);
+					}
+				));
+			}
+		}else{
+			$chunks = [];
+			$chunkCoords = [];
+			foreach($batch as $chunkHash => [$chunkX, $chunkZ]){
+				if(!isset($this->chunks[$chunkHash]) || $this->chunks[$chunkHash]->isLightPopulated() === true){
+					continue;
+				}
+				$chunks[$chunkHash] = $this->chunks[$chunkHash];
+				$chunkCoords[$chunkHash] = [$chunkX, $chunkZ];
+			}
+			if(count($chunks) > 0){
+				$this->workerPool->submitTask(new BatchedLightPopulationTask(
+					$chunks,
+					function(array $results) use ($chunkCoords) : void{
+						if($this->unloaded){
+							return;
+						}
+						foreach($results as $chunkHash => $data){
+							if(!isset($chunkCoords[$chunkHash])){
+								continue;
+							}
+							[$chunkX, $chunkZ] = $chunkCoords[$chunkHash];
+							$chunk = $this->getChunk($chunkX, $chunkZ);
+							if($chunk === null || $chunk->isLightPopulated() === true){
+								continue;
+							}
+							$chunk->setHeightMapArray($data['heightMap']);
+							foreach($data['blockLight'] as $y => $lightArray){
+								$chunk->getSubChunk($y)->setBlockLightArray($lightArray);
+							}
+							foreach($data['skyLight'] as $y => $lightArray){
+								$chunk->getSubChunk($y)->setBlockSkyLightArray($lightArray);
+							}
+							$chunk->setLightPopulated(true);
+							$this->markTickingChunkForRecheck($chunkX, $chunkZ);
+						}
+					}
+				));
+			}
+		}
+		$this->timings->batchedLightPopulation->stopTiming();
 	}
 
 	private function fastRand(int $min, int $max) : int{
@@ -1547,6 +1648,56 @@ class World implements ChunkManager{
 		return $saved;
 	}
 
+	public function saveChunkSliceAsync(int $budget) : int{
+		if($budget <= 0){
+			return 0;
+		}
+		$queued = 0;
+		$this->timings->asyncChunkSave->startTiming();
+		try{
+			foreach($this->chunks as $chunkHash => $chunk){
+				if($queued >= $budget){
+					break;
+				}
+				self::getXZ($chunkHash, $chunkX, $chunkZ);
+				$saveableEntities = array_values(array_filter($this->getChunkEntities($chunkX, $chunkZ), fn(Entity $e) => $e->canSaveWithChunk()));
+				$tiles = $chunk->getTiles();
+				if($chunk->getTerrainDirtyFlags() === Chunk::DIRTY_FLAGS_NONE
+					&& !isset($this->chunkMetadataDirtyFlags[$chunkHash])
+					&& count($tiles) === 0
+					&& count($saveableEntities) === 0
+				){
+					continue;
+				}
+
+				$entityNBT = array_map(fn(Entity $e) => $e->saveNBT(), $saveableEntities);
+				$tileNBT = array_map(fn(Tile $t) => $t->saveNBT(), array_values($tiles));
+				$dirtyFlags = $chunk->getTerrainDirtyFlags();
+
+				$this->workerPool->submitTask(new AsyncChunkSaveTask(
+					$chunk,
+					$entityNBT,
+					$tileNBT,
+					$dirtyFlags,
+					new NonThreadSafeValue($this->provider),
+					$chunkX,
+					$chunkZ,
+					function() use ($chunk, $chunkHash) : void{
+						$chunk->clearTerrainDirtyFlags();
+						unset($this->chunkMetadataDirtyFlags[$chunkHash]);
+					}
+				));
+
+				$chunk->clearTerrainDirtyFlags();
+				unset($this->chunkMetadataDirtyFlags[$chunkHash]);
+				$queued++;
+			}
+		}finally{
+			$this->timings->asyncChunkSave->stopTiming();
+		}
+		return $queued;
+	}
+
 	/**
 	 * Schedules a block update to be executed after the specified number of ticks.
 	 * Blocks will be updated with the scheduled update type.
@@ -1594,6 +1745,32 @@ class World implements ChunkManager{
 	 */
 	public function notifyNeighbourBlockUpdate(Vector3 $pos) : void{
 		$this->internalNotifyNeighbourBlockUpdate($pos->getFloorX(), $pos->getFloorY(), $pos->getFloorZ());
+	}
+
+	public function scheduleRedstoneUpdate(int $x, int $y, int $z) : void{
+		if($this->isInWorld($x, $y, $z)){
+			$hash = World::blockHash($x, $y, $z);
+			if(!isset($this->redstoneUpdateQueueIndex[$hash])){
+				$this->redstoneUpdateQueue->enqueue($hash);
+				$this->redstoneUpdateQueueIndex[$hash] = true;
+			}
+		}
+	}
+
+	public function processRedstoneUpdates() : int{
+		$processed = 0;
+		while($this->redstoneUpdateQueue->count() > 0){
+			$index = $this->redstoneUpdateQueue->dequeue();
+			unset($this->redstoneUpdateQueueIndex[$index]);
+			World::getBlockXYZ($index, $x, $y, $z);
+			if(!$this->isChunkLoaded($x >> Chunk::COORD_BIT_SIZE, $z >> Chunk::COORD_BIT_SIZE)){
+				continue;
+			}
+			$block = $this->getBlockAt($x, $y, $z);
+			$block->onNearbyBlockChange();
+			$processed++;
+		}
+		return $processed;
 	}
 
 	/**
@@ -3724,7 +3901,13 @@ class World implements ChunkManager{
 	}
 
 	public function doChunkGarbageCollection() : void{
-		$this->timings->doChunkGC->startTiming();
+		$this->timings->chunkGCTick->startTiming();
+
+		$playerPositions = [];
+		foreach($this->players as $player){
+			$pos = $player->getPosition();
+			$playerPositions[] = [$pos->getFloorX() >> Chunk::COORD_BIT_SIZE, $pos->getFloorZ() >> Chunk::COORD_BIT_SIZE];
+		}
 
 		foreach($this->chunks as $index => $chunk){
 			if(!isset($this->unloadQueue[$index])){
@@ -3733,12 +3916,31 @@ class World implements ChunkManager{
 					$this->unloadChunkRequest($X, $Z, true);
 				}
 			}
-			$chunk->collectGarbage();
+
+			$shouldGC = true;
+			if(count($playerPositions) > 0){
+				$minDist = PHP_INT_MAX;
+				foreach($playerPositions as [$px, $pz]){
+					$dx = $X - $px;
+					$dz = $Z - $pz;
+					$dist = $dx * $dx + $dz * $dz;
+					if($dist < $minDist){
+						$minDist = $dist;
+					}
+				}
+				if($minDist < 64){
+					$shouldGC = false;
+				}
+			}
+
+			if($shouldGC){
+				$chunk->collectGarbage();
+			}
 		}
 
 		$this->provider->doGarbageCollection();
 
-		$this->timings->doChunkGC->stopTiming();
+		$this->timings->chunkGCTick->stopTiming();
 	}
 
 	public function unloadChunks(bool $force = false) : void{

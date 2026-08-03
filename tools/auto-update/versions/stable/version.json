@@ -1,0 +1,9 @@
+{
+    "version": "stable",
+    "minecraft_version": "26.33",
+    "display_version": "v26.33",
+    "protocol_version": 1001,
+    "is_stable": true,
+    "description": "Latest stable version - recommended for production servers",
+    "saved_at": "2026-08-03T16:30:00"
+}

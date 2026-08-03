@@ -29,13 +29,20 @@ use pocketmine\network\mcpe\protocol\serializer\PacketBatch;
 use pocketmine\Server;
 use pocketmine\timings\Timings;
 use function count;
-use function log;
 use function strlen;
 
 final class StandardPacketBroadcaster implements PacketBroadcaster{
 	public function __construct(
 		private Server $server
 	){}
+
+	private static function varIntSize(int $value) : int{
+		if($value < 128) return 1;
+		if($value < 16384) return 2;
+		if($value < 2097152) return 3;
+		if($value < 268435456) return 4;
+		return 5;
+	}
 
 	public function broadcastPackets(array $recipients, array $packets) : void{
 		//TODO: this shouldn't really be called here, since the broadcaster might be replaced by an alternative
@@ -67,7 +74,7 @@ final class StandardPacketBroadcaster implements PacketBroadcaster{
 			$writer->clear(); //memory reuse let's gooooo
 			$buffer = NetworkSession::encodePacketTimed($writer, $packet);
 			//varint length prefix + packet buffer
-			$totalLength += (((int) log(strlen($buffer), 128)) + 1) + strlen($buffer);
+			$totalLength += self::varIntSize(strlen($buffer)) + strlen($buffer);
 			$packetBuffers[] = $buffer;
 		}
 

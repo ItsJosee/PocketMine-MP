@@ -93,6 +93,11 @@ class InventoryManager{
 	 */
 	private array $networkIdToInventoryMap = [];
 	/**
+	 * @var int[] spl_object_id(Inventory) => network window ID
+	 * @phpstan-var array<int, int>
+	 */
+	private array $inventoryToNetworkIdMap = [];
+	/**
 	 * @var ComplexInventoryMapEntry[] net slot ID => ComplexWindowMapEntry
 	 * @phpstan-var array<int, ComplexInventoryMapEntry>
 	 */
@@ -139,6 +144,7 @@ class InventoryManager{
 
 	private function associateIdWithInventory(int $id, Inventory $inventory) : void{
 		$this->networkIdToInventoryMap[$id] = $inventory;
+		$this->inventoryToNetworkIdMap[spl_object_id($inventory)] = $id;
 	}
 
 	private function getNewWindowId() : int{
@@ -193,6 +199,7 @@ class InventoryManager{
 		$inventory = $this->networkIdToInventoryMap[$id];
 		unset($this->networkIdToInventoryMap[$id]);
 		if($this->getWindowId($inventory) === null){
+			unset($this->inventoryToNetworkIdMap[spl_object_id($inventory)]);
 			unset($this->inventories[spl_object_id($inventory)]);
 			foreach($this->complexSlotToInventoryMap as $netSlot => $entry){
 				if($entry->getInventory() === $inventory){
@@ -203,7 +210,7 @@ class InventoryManager{
 	}
 
 	public function getWindowId(Inventory $inventory) : ?int{
-		return ($id = array_search($inventory, $this->networkIdToInventoryMap, true)) !== false ? $id : null;
+		return $this->inventoryToNetworkIdMap[spl_object_id($inventory)] ?? null;
 	}
 
 	public function getCurrentWindowId() : int{
@@ -241,13 +248,14 @@ class InventoryManager{
 	}
 
 	public function addTransactionPredictedSlotChanges(InventoryTransaction $tx) : void{
+		$typeConverter = null;
 		foreach($tx->getActions() as $action){
 			if($action instanceof SlotChangeAction){
-				//TODO: ItemStackRequestExecutor can probably build these predictions with much lower overhead
-				$this->addPredictedSlotChange(
+				$typeConverter ??= $this->session->getTypeConverter();
+				$this->addPredictedSlotChangeInternal(
 					$action->getInventory(),
 					$action->getSlot(),
-					$action->getTargetItem()
+					$typeConverter->coreItemStackToNet($action->getTargetItem())
 				);
 			}
 		}

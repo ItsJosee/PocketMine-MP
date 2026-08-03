@@ -25,13 +25,16 @@ namespace pocketmine\utils;
 
 use pocketmine\VersionInfo;
 use function array_merge;
+use function curl_close;
 use function curl_error;
 use function curl_exec;
 use function curl_getinfo;
 use function curl_init;
+use function curl_reset;
 use function curl_setopt_array;
 use function explode;
 use function is_string;
+use function parse_url;
 use function preg_match;
 use function socket_close;
 use function socket_connect;
@@ -66,6 +69,10 @@ use const SOL_UDP;
 class Internet{
 	public static string|false $ip = false;
 	public static bool $online = true;
+
+	private static array $connectionPool = [];
+	private const POOL_MAX_CONNECTIONS = 10;
+	private const POOL_CONNECTION_TTL = 300;
 
 	/**
 	 * Lazily gets the External IP using an external service and caches the result
@@ -198,16 +205,25 @@ class Internet{
 			throw new InternetException("Cannot execute web request while offline");
 		}
 
-		$ch = curl_init($page);
-		if($ch === false){
-			throw new InternetException("Unable to create new cURL session");
+		$host = parse_url($page, PHP_URL_HOST) ?: 'unknown';
+		$poolKey = $host;
+
+		if(isset(self::$connectionPool[$poolKey]) && count(self::$connectionPool[$poolKey]) > 0){
+			$ch = array_pop(self::$connectionPool[$poolKey]);
+			curl_reset($ch);
+		}else{
+			$ch = curl_init();
+			if($ch === false){
+				throw new InternetException("Unable to create new cURL session");
+			}
 		}
 
 		curl_setopt_array($ch, $extraOpts + [
+			CURLOPT_URL => $page,
 			CURLOPT_SSL_VERIFYPEER => false,
 			CURLOPT_SSL_VERIFYHOST => 2,
-			CURLOPT_FORBID_REUSE => 1,
-			CURLOPT_FRESH_CONNECT => 1,
+			CURLOPT_FORBID_REUSE => 0,
+			CURLOPT_FRESH_CONNECT => 0,
 			CURLOPT_AUTOREFERER => true,
 			CURLOPT_FOLLOWLOCATION => true,
 			CURLOPT_RETURNTRANSFER => true,
@@ -218,7 +234,9 @@ class Internet{
 		]);
 		$raw = curl_exec($ch);
 		if($raw === false){
-			throw new InternetException(curl_error($ch));
+			$error = curl_error($ch);
+			curl_close($ch);
+			throw new InternetException($error);
 		}
 		if(!is_string($raw)) throw new AssumptionFailedError("curl_exec() should return string|false when CURLOPT_RETURNTRANSFER is set");
 		$httpCode = curl_getinfo($ch, CURLINFO_HTTP_CODE);
@@ -226,7 +244,6 @@ class Internet{
 		$rawHeaders = substr($raw, 0, $headerSize);
 		$body = substr($raw, $headerSize);
 		$headers = [];
-		//TODO: explore if we can set these limits lower
 		foreach(explode("\r\n\r\n", $rawHeaders, limit: PHP_INT_MAX) as $rawHeaderGroup){
 			$headerGroup = [];
 			foreach(explode("\r\n", $rawHeaderGroup, limit: PHP_INT_MAX) as $line){
@@ -240,6 +257,25 @@ class Internet{
 		if($onSuccess !== null){
 			$onSuccess($ch);
 		}
+
+		if(!isset(self::$connectionPool[$poolKey])){
+			self::$connectionPool[$poolKey] = [];
+		}
+		if(count(self::$connectionPool[$poolKey]) < self::POOL_MAX_CONNECTIONS){
+			self::$connectionPool[$poolKey][] = $ch;
+		}else{
+			curl_close($ch);
+		}
+
 		return new InternetRequestResult($headers, $body, $httpCode);
+	}
+
+	public static function clearConnectionPool() : void{
+		foreach(self::$connectionPool as $connections){
+			foreach($connections as $ch){
+				curl_close($ch);
+			}
+		}
+		self::$connectionPool = [];
 	}
 }
