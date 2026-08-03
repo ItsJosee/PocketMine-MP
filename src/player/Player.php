@@ -1981,6 +1981,14 @@ class Player extends Human implements CommandSender, ChunkListener, IPlayer, Nev
 		if($this->canInteract($pos->add(0.5, 0.5, 0.5), $this->isCreative() ? self::MAX_REACH_DISTANCE_CREATIVE : self::MAX_REACH_DISTANCE_SURVIVAL)){
 			$this->broadcastAnimation(new ArmSwingAnimation($this), $this->getViewers());
 			$item = $this->inventory->getItemInHand(); //this is a copy of the real item
+
+			//Validate that the player actually has an item in hand before proceeding
+			//This prevents exploits where clients try to place blocks without having them
+			if($item->isNull()){
+				$this->logger->debug("Cancelled block interaction at $pos: player has no item in hand");
+				return false;
+			}
+
 			$oldItem = clone $item;
 			$returnedItems = [];
 			if($this->getWorld()->useItemOn($pos, $item, $face, $clickOffset, $this, true, $returnedItems)){
