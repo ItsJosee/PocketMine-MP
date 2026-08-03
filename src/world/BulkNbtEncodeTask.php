@@ -29,7 +29,6 @@ use pocketmine\nbt\NbtDataException;
 use pocketmine\nbt\tag\CompoundTag;
 use pocketmine\scheduler\AsyncTask;
 use pocketmine\thread\NonThreadSafeValue;
-use function array_map;
 
 /**
  * Offloads NBT encoding of a batch of pre-built {@link CompoundTag}s to a worker thread.

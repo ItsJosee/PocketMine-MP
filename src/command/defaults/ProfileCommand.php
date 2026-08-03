@@ -25,12 +25,12 @@ namespace pocketmine\command\defaults;
 
 use pocketmine\command\Command;
 use pocketmine\command\CommandSender;
-use pocketmine\command\utils\InvalidCommandSyntaxException;
 use pocketmine\lang\KnownTranslationFactory;
 use pocketmine\permission\DefaultPermissionNames;
 use pocketmine\timings\TimingsHandler;
 use function count;
 use function is_numeric;
+use function max;
 
 /**
  * Built-in profiler command: reports the top CPU and memory hotpaths from the current timings session.

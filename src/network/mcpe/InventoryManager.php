@@ -69,7 +69,6 @@ use pocketmine\utils\ObjectSet;
 use function array_fill_keys;
 use function array_keys;
 use function array_map;
-use function array_search;
 use function count;
 use function get_class;
 use function implode;

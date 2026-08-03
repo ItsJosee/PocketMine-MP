@@ -127,6 +127,7 @@ use function array_values;
 use function base64_encode;
 use function bin2hex;
 use function count;
+use function crc32;
 use function get_class;
 use function implode;
 use function in_array;
@@ -230,11 +231,11 @@ class NetworkSession{
 	private const DEDUP_MAX_HASHES = 8;
 
 	private const DEDUP_PACKET_TYPES = [
-		\pocketmine\network\mcpe\protocol\SetActorDataPacket::class => true,
-		\pocketmine\network\mcpe\protocol\SetActorMotionPacket::class => true,
-		\pocketmine\network\mcpe\protocol\MoveActorAbsolutePacket::class => true,
-		\pocketmine\network\mcpe\protocol\UpdateAttributesPacket::class => true,
-		\pocketmine\network\mcpe\protocol\LevelChunkPacket::class => true,
+		protocol\SetActorDataPacket::class => true,
+		protocol\SetActorMotionPacket::class => true,
+		protocol\MoveActorAbsolutePacket::class => true,
+		protocol\UpdateAttributesPacket::class => true,
+		protocol\LevelChunkPacket::class => true,
 	];
 
 	public function __construct(
@@ -650,7 +651,7 @@ class NetworkSession{
 			foreach($packets as $evPacket){
 				$writer->clear();
 				$encoded = self::encodePacketTimed($writer, $evPacket);
-				
+
 				$packetClass = get_class($evPacket);
 				if(isset(self::DEDUP_PACKET_TYPES[$packetClass])){
 					$hash = crc32($encoded);
@@ -673,7 +674,7 @@ class NetworkSession{
 						}
 					}
 				}
-				
+
 				$this->addToSendBuffer($encoded);
 			}
 			if($immediate){

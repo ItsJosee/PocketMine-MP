@@ -25,6 +25,8 @@ namespace pocketmine\utils;
 
 use pocketmine\VersionInfo;
 use function array_merge;
+use function array_pop;
+use function count;
 use function curl_close;
 use function curl_error;
 use function curl_exec;
@@ -62,7 +64,9 @@ use const CURLOPT_RETURNTRANSFER;
 use const CURLOPT_SSL_VERIFYHOST;
 use const CURLOPT_SSL_VERIFYPEER;
 use const CURLOPT_TIMEOUT_MS;
+use const CURLOPT_URL;
 use const PHP_INT_MAX;
+use const PHP_URL_HOST;
 use const SOCK_DGRAM;
 use const SOL_UDP;
 
