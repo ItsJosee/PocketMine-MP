@@ -26,10 +26,23 @@ namespace pocketmine\world\sound;
 use pocketmine\math\Vector3;
 use pocketmine\network\mcpe\protocol\LevelSoundEventPacket;
 use pocketmine\network\mcpe\protocol\types\LevelSoundEvent;
+use pocketmine\utils\AssumptionFailedError;
 
-class CrossbowLoadSound implements Sound{
+final class CrossbowLoadSound implements Sound{
+
+	public const LOADING_START = 0;
+	public const LOADING_MIDDLE = 1;
+	public const LOADING_END = 2;
+
+	public function __construct(private readonly int $type, private readonly bool $quickCharge){}
 
 	public function encode(Vector3 $pos) : array{
-		return [LevelSoundEventPacket::nonActorSound(LevelSoundEvent::CROSSBOW_LOAD, $pos, false)];
+		$sound = match($this->type){
+			self::LOADING_START => $this->quickCharge ? LevelSoundEvent::CROSSBOW_QUICK_CHARGE_START : LevelSoundEvent::CROSSBOW_LOADING_START,
+			self::LOADING_MIDDLE => $this->quickCharge ? LevelSoundEvent::CROSSBOW_QUICK_CHARGE_MIDDLE : LevelSoundEvent::CROSSBOW_LOADING_MIDDLE,
+			self::LOADING_END => $this->quickCharge ? LevelSoundEvent::CROSSBOW_QUICK_CHARGE_END : LevelSoundEvent::CROSSBOW_LOADING_END,
+			default => throw new AssumptionFailedError("Unknown crossbow loading type $this->type")
+		};
+		return [LevelSoundEventPacket::nonActorSound($sound, $pos, false)];
 	}
 }
