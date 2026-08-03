@@ -12,12 +12,12 @@
 </p>
 
 <p align="center">
-	<a href="https://github.com/pmmp/PocketMine-MP/actions/workflows/main.yml"><img src="https://github.com/pmmp/PocketMine-MP/actions/workflows/main.yml/badge.svg" alt="CI" /></a>
-	<a href="https://github.com/pmmp/PocketMine-MP/releases/latest"><img alt="GitHub release (latest SemVer)" src="https://img.shields.io/github/v/release/pmmp/PocketMine-MP?label=release&sort=semver"></a>
+	<a href="https://github.com/ItsJosee/PocketMine-MP/actions/workflows/main.yml"><img src="https://github.com/ItsJosee/PocketMine-MP/actions/workflows/main.yml/badge.svg" alt="CI" /></a>
+	<a href="https://github.com/ItsJosee/PocketMine-MP/releases/latest"><img alt="GitHub release (latest SemVer)" src="https://img.shields.io/github/v/release/ItsJosee/PocketMine-MP?label=release&sort=semver"></a>
 	<a href="https://discord.gg/bmSAZBG"><img src="https://img.shields.io/discord/373199722573201408?label=discord&color=7289DA&logo=discord" alt="Discord" /></a>
 	<br>
-	<a href="https://github.com/pmmp/PocketMine-MP/releases"><img alt="GitHub all releases" src="https://img.shields.io/github/downloads/pmmp/PocketMine-MP/total?label=downloads%40total"></a>
-	<a href="https://github.com/pmmp/PocketMine-MP/releases/latest"><img alt="GitHub release (latest by SemVer)" src="https://img.shields.io/github/downloads/pmmp/PocketMine-MP/latest/total?sort=semver"></a>
+	<a href="https://github.com/ItsJosee/PocketMine-MP/releases"><img alt="GitHub all releases" src="https://img.shields.io/github/downloads/ItsJosee/PocketMine-MP/total?label=downloads%40total"></a>
+	<a href="https://github.com/ItsJosee/PocketMine-MP/releases/latest"><img alt="GitHub release (latest by SemVer)" src="https://img.shields.io/github/downloads/ItsJosee/PocketMine-MP/latest/total?sort=semver"></a>
 </p>
 
 ## What is this?
@@ -30,6 +30,16 @@ If you're looking to create a Minecraft: Bedrock server with **custom functional
 - 🌐 **Multi-world support** - offer a more varied game experience to players without transferring them to other server nodes
 - 🏎️ **Performance** - get 100+ players onto one server (depending on hardware and plugins)
 - ⤴️ **Continuously updated** - new Minecraft versions are usually supported within days
+
+## About this Fork
+This is a maintained fork of [PocketMine-MP](https://github.com/pmmp/PocketMine-MP), created to ensure continued development and support for the project.
+
+**Why this fork exists:**
+- To maintain and update PocketMine-MP independently
+- To provide a stable version for server operators
+- To keep the project alive and accessible to the community
+
+This fork is based on the original PocketMine-MP project and follows the same licensing terms (LGPL-3.0).
 
 ## :x: PocketMine-MP is NOT a vanilla Minecraft server software.
 **It is poorly suited to hosting vanilla survival servers.**
@@ -67,16 +77,7 @@ PocketMine-MP accepts community contributions! The following resources will be u
 
 New here? Check out [issues with the "Easy task" label](https://github.com/pmmp/PocketMine-MP/issues?q=is%3Aissue%20state%3Aopen%20label%3A%22Easy%20task%22) for things you could work to familiarise yourself with the codebase.
 
-## Donate
-PocketMine-MP is free, but it requires a lot of time and effort from unpaid volunteers to develop. Donations enable us to keep delivering support for new versions and adding features your players love.
 
-You can support development using the following methods:
-
-- [Patreon](https://www.patreon.com/pocketminemp)
-- Bitcoin (BTC): `bc1q2v5ngyf8ugyd55kqa9ep35g2rv342ueqm6ks33`
-- Stellar Lumens (XLM): `GAAC5WZ33HCTE3BFJFZJXONMEIBNHFLBXM2HJVAZHXXPYA3HP5XPPS7T`
-
-Thanks for your support!
 
 ## Licensing information
 This project is licensed under LGPL-3.0. Please see the [LICENSE](/LICENSE) file for details.
