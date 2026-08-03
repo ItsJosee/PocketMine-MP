@@ -169,6 +169,7 @@ final class VanillaItems{
 	private static EnderPearl $_mENDER_PEARL;
 	private static EndCrystal $_mEND_CRYSTAL;
 	private static ExperienceBottle $_mEXPERIENCE_BOTTLE;
+	private static Elytra $_mELYTRA;
 	private static Item $_mEYE_ARMOR_TRIM_SMITHING_TEMPLATE;
 	private static Item $_mFEATHER;
 	private static Item $_mFERMENTED_SPIDER_EYE;
@@ -528,6 +529,7 @@ final class VanillaItems{
 			"ender_pearl" => fn(EnderPearl $v) => self::$_mENDER_PEARL = $v,
 			"end_crystal" => fn(EndCrystal $v) => self::$_mEND_CRYSTAL = $v,
 			"experience_bottle" => fn(ExperienceBottle $v) => self::$_mEXPERIENCE_BOTTLE = $v,
+			"elytra" => fn(Elytra $v) => self::$_mELYTRA = $v,
 			"eye_armor_trim_smithing_template" => fn(Item $v) => self::$_mEYE_ARMOR_TRIM_SMITHING_TEMPLATE = $v,
 			"feather" => fn(Item $v) => self::$_mFEATHER = $v,
 			"fermented_spider_eye" => fn(Item $v) => self::$_mFERMENTED_SPIDER_EYE = $v,
@@ -1413,6 +1415,11 @@ final class VanillaItems{
 	public static function EXPERIENCE_BOTTLE() : ExperienceBottle{
 		if(!isset(self::$_mEXPERIENCE_BOTTLE)){ self::init(); }
 		return clone self::$_mEXPERIENCE_BOTTLE;
+	}
+
+	public static function ELYTRA() : Elytra{
+		if(!isset(self::$_mELYTRA)){ self::init(); }
+		return clone self::$_mELYTRA;
 	}
 
 	public static function EYE_ARMOR_TRIM_SMITHING_TEMPLATE() : Item{
