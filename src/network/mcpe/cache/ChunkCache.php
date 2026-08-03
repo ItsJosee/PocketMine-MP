@@ -194,9 +194,15 @@ class ChunkCache implements ChunkListener{
 	 * @see ChunkListener::onBlockChanged()
 	 */
 	public function onBlockChanged(Vector3 $block) : void{
-		//FIXME: requesters will still receive this chunk after it's been dropped, but we can't mark this for a simple
-		//sync here because it can spam the worker pool
-		$this->destroy($block->getFloorX() >> Chunk::COORD_BIT_SIZE, $block->getFloorZ() >> Chunk::COORD_BIT_SIZE);
+		$chunkX = $block->getFloorX() >> Chunk::COORD_BIT_SIZE;
+		$chunkZ = $block->getFloorZ() >> Chunk::COORD_BIT_SIZE;
+		$chunkHash = World::chunkHash($chunkX, $chunkZ);
+		$existing = $this->caches[$chunkHash] ?? null;
+		if($existing !== null && is_string($existing)){
+			unset($this->caches[$chunkHash]);
+		}elseif($existing !== null){
+			$this->destroyOrRestart($chunkX, $chunkZ);
+		}
 	}
 
 	/**

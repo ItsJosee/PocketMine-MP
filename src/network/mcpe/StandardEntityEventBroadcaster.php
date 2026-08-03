@@ -63,6 +63,18 @@ final class StandardEntityEventBroadcaster implements EntityEventBroadcaster{
 		$this->broadcaster->broadcastPackets($recipients, [$packet]);
 	}
 
+	/**
+	 * @param NetworkSession[] $recipients
+	 * @param ClientboundPacket[] $packets
+	 */
+	public function sendDataPackets(array $recipients, array $packets) : void{
+		if(count($packets) === 1){
+			$this->broadcaster->broadcastPackets($recipients, $packets);
+		}elseif(count($packets) > 1){
+			$this->broadcaster->broadcastPackets($recipients, $packets);
+		}
+	}
+
 	public function syncAttributes(array $recipients, Living $entity, array $attributes) : void{
 		if(count($attributes) > 0){
 			$this->sendDataPacket($recipients, UpdateAttributesPacket::create(

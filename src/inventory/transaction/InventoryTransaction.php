@@ -265,6 +265,14 @@ class InventoryTransaction{
 	public function validate() : void{
 		$this->squashDuplicateSlotChanges();
 
+		if(count($this->actions) === 1){
+			$action = array_values($this->actions)[0];
+			if($action instanceof SlotChangeAction){
+				$action->validate($this->source);
+				return;
+			}
+		}
+
 		$haveItems = [];
 		$needItems = [];
 		$this->matchItems($needItems, $haveItems);

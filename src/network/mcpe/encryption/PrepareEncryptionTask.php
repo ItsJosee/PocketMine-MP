@@ -38,6 +38,7 @@ class PrepareEncryptionTask extends AsyncTask{
 	private const TLS_KEY_ON_COMPLETION = "completion";
 
 	private static ?\OpenSSLAsymmetricKey $SERVER_PRIVATE_KEY = null;
+	private static ?string $SERVER_PRIVATE_KEY_SERIALIZED = null;
 
 	private string $serverPrivateKey;
 
@@ -60,9 +61,10 @@ class PrepareEncryptionTask extends AsyncTask{
 				throw new \RuntimeException("openssl_pkey_new() failed: " . openssl_error_string());
 			}
 			self::$SERVER_PRIVATE_KEY = $serverPrivateKey;
+			self::$SERVER_PRIVATE_KEY_SERIALIZED = igbinary_serialize(openssl_pkey_get_details(self::$SERVER_PRIVATE_KEY));
 		}
 
-		$this->serverPrivateKey = igbinary_serialize(openssl_pkey_get_details(self::$SERVER_PRIVATE_KEY));
+		$this->serverPrivateKey = self::$SERVER_PRIVATE_KEY_SERIALIZED;
 		$this->storeLocal(self::TLS_KEY_ON_COMPLETION, $onCompletion);
 	}
 

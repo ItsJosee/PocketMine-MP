@@ -249,6 +249,7 @@ class Server{
 	private array $useAverage;
 	private float $currentTPS = self::TARGET_TICKS_PER_SECOND;
 	private float $currentUse = 0;
+	private array $tickProfile = [];
 	private float $startTime;
 
 	private bool $doTitleTick = true;
@@ -485,6 +486,10 @@ class Server{
 	 */
 	public function getTickUsageAverage() : float{
 		return round((array_sum($this->useAverage) / count($this->useAverage)) * 100, 2);
+	}
+
+	public function getTickProfile() : array{
+		return $this->tickProfile;
 	}
 
 	public function getStartTime() : float{
@@ -1874,7 +1879,7 @@ class Server{
 	 */
 	private function tick() : void{
 		$tickTime = microtime(true);
-		if(($tickTime - $this->nextTick) < -0.025){ //Allow half a tick of diff
+		if(($tickTime - $this->nextTick) < -0.025){
 			return;
 		}
 
@@ -1882,19 +1887,38 @@ class Server{
 
 		++$this->tickCounter;
 
+		$tickProfileStart = microtime(true);
+
 		Timings::$scheduler->startTiming();
 		$this->pluginManager->tickSchedulers($this->tickCounter);
 		Timings::$scheduler->stopTiming();
+
+		$schedulerTime = microtime(true);
 
 		Timings::$schedulerAsync->startTiming();
 		$this->asyncPool->collectTasks();
 		Timings::$schedulerAsync->stopTiming();
 
+		$asyncCollectTime = microtime(true);
+
 		$this->worldManager->tick($this->tickCounter);
+
+		$worldTickTime = microtime(true);
 
 		Timings::$connection->startTiming();
 		$this->network->tick();
 		Timings::$connection->stopTiming();
+
+		$networkTickTime = microtime(true);
+
+		if(($this->tickCounter % self::TARGET_TICKS_PER_SECOND) === 0){
+			$this->tickProfile = [
+				'schedulers' => ($schedulerTime - $tickProfileStart) * 1000,
+				'asyncCollect' => ($asyncCollectTime - $schedulerTime) * 1000,
+				'worldTick' => ($worldTickTime - $asyncCollectTime) * 1000,
+				'networkTick' => ($networkTickTime - $worldTickTime) * 1000,
+			];
+		}
 
 		if(($this->tickCounter % self::TARGET_TICKS_PER_SECOND) === 0){
 			if($this->doTitleTick){
