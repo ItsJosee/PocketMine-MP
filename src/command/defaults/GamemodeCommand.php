@@ -29,15 +29,25 @@ use pocketmine\command\utils\InvalidCommandSyntaxException;
 use pocketmine\lang\KnownTranslationFactory;
 use pocketmine\permission\DefaultPermissionNames;
 use pocketmine\player\GameMode;
+use function array_unshift;
 use function count;
+use function strtolower;
 
 class GamemodeCommand extends VanillaCommand{
+
+	private const ALIASES = [
+		"gmc" => GameMode::CREATIVE,
+		"gms" => GameMode::SURVIVAL,
+		"gma" => GameMode::ADVENTURE,
+		"gmsp" => GameMode::SPECTATOR,
+	];
 
 	public function __construct(){
 		parent::__construct(
 			"gamemode",
 			KnownTranslationFactory::pocketmine_command_gamemode_description(),
-			KnownTranslationFactory::commands_gamemode_usage()
+			KnownTranslationFactory::commands_gamemode_usage(),
+			["gmc", "gms", "gma", "gmsp"]
 		);
 		$this->setPermissions([
 			DefaultPermissionNames::COMMAND_GAMEMODE_SELF,
@@ -46,6 +56,15 @@ class GamemodeCommand extends VanillaCommand{
 	}
 
 	public function execute(CommandSender $sender, string $commandLabel, array $args){
+		$aliasMode = self::ALIASES[strtolower($commandLabel)] ?? null;
+		if($aliasMode !== null){
+			if(count($args) === 0){
+				$args[0] = $aliasMode->name();
+			}else{
+				array_unshift($args, $aliasMode->name());
+			}
+		}
+
 		if(count($args) === 0){
 			throw new InvalidCommandSyntaxException();
 		}

@@ -25,9 +25,11 @@ namespace pocketmine\command\defaults;
 
 use pocketmine\command\CommandSender;
 use pocketmine\command\utils\InvalidCommandSyntaxException;
+use pocketmine\command\utils\SelectorParser;
 use pocketmine\entity\Attribute;
 use pocketmine\lang\KnownTranslationFactory;
 use pocketmine\permission\DefaultPermissionNames;
+use pocketmine\player\Player;
 use pocketmine\utils\AssumptionFailedError;
 use pocketmine\utils\Limits;
 use pocketmine\utils\TextFormat;
@@ -55,33 +57,69 @@ class XpCommand extends VanillaCommand{
 			throw new InvalidCommandSyntaxException();
 		}
 
-		$player = $this->fetchPermittedPlayerTarget($sender, $args[1] ?? null, DefaultPermissionNames::COMMAND_XP_SELF, DefaultPermissionNames::COMMAND_XP_OTHER);
-		if($player === null){
-			return true;
+		$xpArg = $args[0];
+		$targetArg = $args[1] ?? null;
+
+		if(SelectorParser::isSelector($xpArg)){
+			if(count($args) < 2){
+				throw new InvalidCommandSyntaxException();
+			}
+			$targetArg = $xpArg;
+			$xpArg = $args[1];
 		}
 
-		$xpManager = $player->getXpManager();
-		if(str_ends_with($args[0], "L")){
-			$xpLevelAttr = $player->getAttributeMap()->get(Attribute::EXPERIENCE_LEVEL) ?? throw new AssumptionFailedError();
-			$maxXpLevel = (int) $xpLevelAttr->getMaxValue();
-			$currentXpLevel = $xpManager->getXpLevel();
-			$xpLevels = $this->getInteger($sender, substr($args[0], 0, -1), -$currentXpLevel, $maxXpLevel - $currentXpLevel);
-			if($xpLevels >= 0){
-				$xpManager->addXpLevels($xpLevels, false);
-				$sender->sendMessage(KnownTranslationFactory::commands_xp_success_levels((string) $xpLevels, $player->getName()));
-			}else{
-				$xpLevels = abs($xpLevels);
-				$xpManager->subtractXpLevels($xpLevels);
-				$sender->sendMessage(KnownTranslationFactory::commands_xp_success_negative_levels((string) $xpLevels, $player->getName()));
+		if(SelectorParser::isSelector($targetArg ?? "")){
+			$senderPlayer = $sender instanceof Player ? $sender : null;
+			$entities = SelectorParser::parse($targetArg, $senderPlayer);
+			$players = [];
+			foreach($entities as $entity){
+				if($entity instanceof Player){
+					$players[] = $entity;
+				}
+			}
+			if(count($players) === 0){
+				$sender->sendMessage(TextFormat::RED . "No matching players found.");
+				return true;
 			}
 		}else{
-			$xp = $this->getInteger($sender, $args[0], max: Limits::INT32_MAX);
-			if($xp < 0){
-				$sender->sendMessage(KnownTranslationFactory::commands_xp_failure_widthdrawXp()->prefix(TextFormat::RED));
-			}else{
-				$xpManager->addXp($xp, false);
-				$sender->sendMessage(KnownTranslationFactory::commands_xp_success((string) $xp, $player->getName()));
+			$player = $this->fetchPermittedPlayerTarget($sender, $targetArg, DefaultPermissionNames::COMMAND_XP_SELF, DefaultPermissionNames::COMMAND_XP_OTHER);
+			if($player === null){
+				return true;
 			}
+			$players = [$player];
+		}
+
+		$count = 0;
+		foreach($players as $p){
+			$xpManager = $p->getXpManager();
+			if(str_ends_with($xpArg, "L")){
+				$xpLevelAttr = $p->getAttributeMap()->get(Attribute::EXPERIENCE_LEVEL) ?? throw new AssumptionFailedError();
+				$maxXpLevel = (int) $xpLevelAttr->getMaxValue();
+				$currentXpLevel = $xpManager->getXpLevel();
+				$xpLevels = $this->getInteger($sender, substr($xpArg, 0, -1), -$currentXpLevel, $maxXpLevel - $currentXpLevel);
+				if($xpLevels >= 0){
+					$xpManager->addXpLevels($xpLevels, false);
+				}else{
+					$xpLevels = abs($xpLevels);
+					$xpManager->subtractXpLevels($xpLevels);
+				}
+			}else{
+				$xp = $this->getInteger($sender, $xpArg, max: Limits::INT32_MAX);
+				if($xp >= 0){
+					$xpManager->addXp($xp, false);
+				}
+			}
+			$count++;
+		}
+
+		if($count === 1){
+			if(str_ends_with($xpArg, "L")){
+				$sender->sendMessage(KnownTranslationFactory::commands_xp_success_levels(substr($xpArg, 0, -1), $players[0]->getName()));
+			}else{
+				$sender->sendMessage(KnownTranslationFactory::commands_xp_success($xpArg, $players[0]->getName()));
+			}
+		}else{
+			$sender->sendMessage("Given " . $xpArg . " to " . $count . " players.");
 		}
 
 		return true;

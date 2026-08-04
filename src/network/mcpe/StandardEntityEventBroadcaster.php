@@ -64,7 +64,7 @@ final class StandardEntityEventBroadcaster implements EntityEventBroadcaster{
 	}
 
 	/**
-	 * @param NetworkSession[] $recipients
+	 * @param NetworkSession[]    $recipients
 	 * @param ClientboundPacket[] $packets
 	 */
 	public function sendDataPackets(array $recipients, array $packets) : void{

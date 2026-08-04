@@ -26,9 +26,12 @@ namespace pocketmine\command\defaults;
 use pocketmine\command\Command;
 use pocketmine\command\CommandSender;
 use pocketmine\command\utils\InvalidCommandSyntaxException;
+use pocketmine\command\utils\SelectorParser;
 use pocketmine\event\entity\EntityDamageEvent;
 use pocketmine\lang\KnownTranslationFactory;
 use pocketmine\permission\DefaultPermissionNames;
+use pocketmine\player\Player;
+use pocketmine\utils\TextFormat;
 use function count;
 
 class KillCommand extends VanillaCommand{
@@ -46,6 +49,26 @@ class KillCommand extends VanillaCommand{
 	public function execute(CommandSender $sender, string $commandLabel, array $args){
 		if(count($args) >= 2){
 			throw new InvalidCommandSyntaxException();
+		}
+
+		if(count($args) === 1 && SelectorParser::isSelector($args[0])){
+			$senderPlayer = $sender instanceof Player ? $sender : null;
+			$entities = SelectorParser::parse($args[0], $senderPlayer);
+			$players = [];
+			foreach($entities as $entity){
+				if($entity instanceof Player){
+					$players[] = $entity;
+				}
+			}
+			if(count($players) === 0){
+				$sender->sendMessage(TextFormat::RED . "No matching players found.");
+				return true;
+			}
+			foreach($players as $player){
+				$player->attack(new EntityDamageEvent($player, EntityDamageEvent::CAUSE_SUICIDE, $player->getHealth()));
+			}
+			Command::broadcastCommandMessage($sender, "Killed " . count($players) . " player(s)");
+			return true;
 		}
 
 		$player = $this->fetchPermittedPlayerTarget($sender, $args[0] ?? null, DefaultPermissionNames::COMMAND_KILL_SELF, DefaultPermissionNames::COMMAND_KILL_OTHER);
