@@ -45,8 +45,10 @@ use pocketmine\command\defaults\OpCommand;
 use pocketmine\command\defaults\PardonCommand;
 use pocketmine\command\defaults\PardonIpCommand;
 use pocketmine\command\defaults\ParticleCommand;
+use pocketmine\command\defaults\PingCommand;
 use pocketmine\command\defaults\PluginsCommand;
 use pocketmine\command\defaults\ProfileCommand;
+use pocketmine\command\defaults\ReplyCommand;
 use pocketmine\command\defaults\SaveCommand;
 use pocketmine\command\defaults\SaveOffCommand;
 use pocketmine\command\defaults\SaveOnCommand;
@@ -118,8 +120,10 @@ class SimpleCommandMap implements CommandMap{
 			new PardonCommand(),
 			new PardonIpCommand(),
 			new ParticleCommand(),
-			new ProfileCommand(),
+			new PingCommand(),
 			new PluginsCommand(),
+			new ProfileCommand(),
+			new ReplyCommand(),
 			new SaveCommand(),
 			new SaveOffCommand(),
 			new SaveOnCommand(),

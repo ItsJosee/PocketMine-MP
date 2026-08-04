@@ -52,6 +52,7 @@ final class DefaultPermissionNames{
 	public const COMMAND_OP_GIVE = "pocketmine.command.op.give";
 	public const COMMAND_OP_TAKE = "pocketmine.command.op.take";
 	public const COMMAND_PARTICLE = "pocketmine.command.particle";
+	public const COMMAND_PING = "pocketmine.command.ping";
 	public const COMMAND_PLUGINS = "pocketmine.command.plugins";
 	public const COMMAND_SAVE_DISABLE = "pocketmine.command.save.disable";
 	public const COMMAND_SAVE_ENABLE = "pocketmine.command.save.enable";

@@ -478,20 +478,6 @@ class InGamePacketHandler extends PacketHandler{
 
 				self::validateFacing($data->getFace());
 
-				//Validate that the client's claimed item in hand matches the server's actual item
-				//This helps detect modified clients trying to place blocks they don't have
-				$serverItemInHand = $this->player->getInventory()->getItemInHand();
-				$clientItemInHand = $data->getItemInHand();
-				if(!$serverItemInHand->isNull() && !$clientItemInHand->isNull()){
-					//Compare item type IDs to detect if client is trying to place a different item
-					$serverItemTypeId = $serverItemInHand->getTypeId();
-					$clientItemTypeId = $clientItemInHand->getTypeId();
-					if($serverItemTypeId !== $clientItemTypeId){
-						$this->session->getLogger()->debug("Item mismatch: client claims type $clientItemTypeId but server has type $serverItemTypeId, forcing resync");
-						$this->inventoryManager->requestSyncAll();
-					}
-				}
-
 				$blockPos = $data->getBlockPosition();
 				$vBlockPos = new Vector3($blockPos->getX(), $blockPos->getY(), $blockPos->getZ());
 				$this->player->interactBlock($vBlockPos, $data->getFace(), $clickPos);

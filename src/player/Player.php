@@ -284,6 +284,8 @@ class Player extends Human implements CommandSender, ChunkListener, IPlayer, Nev
 	/** @var bool[] map: raw UUID (string) => bool */
 	protected array $hiddenPlayers = [];
 
+	private ?Player $lastMessagedFrom = null;
+
 	protected float $moveRateLimit = 10 * self::MOVES_PER_TICK;
 	protected ?float $lastMovementProcess = null;
 
@@ -1176,6 +1178,14 @@ class Player extends Human implements CommandSender, ChunkListener, IPlayer, Nev
 
 	public function isSleeping() : bool{
 		return $this->sleeping !== null;
+	}
+
+	public function getLastMessagedFrom() : ?Player{
+		return $this->lastMessagedFrom;
+	}
+
+	public function setLastMessagedFrom(?Player $player) : void{
+		$this->lastMessagedFrom = $player;
 	}
 
 	public function sleepOn(Vector3 $pos) : bool{
