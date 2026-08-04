@@ -26,12 +26,12 @@ namespace pocketmine\world;
 use pmmp\thread\ThreadSafeArray;
 use pocketmine\scheduler\AsyncTask;
 use pocketmine\world\format\Chunk;
+use function abs;
 use function array_reverse;
 use function count;
 use function igbinary_serialize;
 use function igbinary_unserialize;
-use function intdiv;
-use function spl_object_id;
+use const PHP_INT_MAX;
 
 /**
  * Builds an immutable, thread-safe snapshot of block state IDs for a rectangular region of chunks.
@@ -46,7 +46,7 @@ use function spl_object_id;
 final class PathfindingSnapshot{
 
 	/**
-	 * @param int[] $chunkHashes list of chunk hashes to include
+	 * @param int[]                                      $chunkHashes   list of chunk hashes to include
 	 * @param \Closure(int $chunkX, int $chunkZ): ?Chunk $chunkProvider returns the chunk or null if not loaded
 	 *
 	 * @phpstan-param list<int> $chunkHashes

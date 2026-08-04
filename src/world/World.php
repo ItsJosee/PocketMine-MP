@@ -78,8 +78,8 @@ use pocketmine\network\mcpe\protocol\UpdateBlockPacket;
 use pocketmine\player\Player;
 use pocketmine\promise\Promise;
 use pocketmine\promise\PromiseResolver;
-use pocketmine\scheduler\AsyncPool;
 use pocketmine\scheduler\AsyncChunkSaveTask;
+use pocketmine\scheduler\AsyncPool;
 use pocketmine\Server;
 use pocketmine\ServerConfigGroup;
 use pocketmine\thread\NonThreadSafeValue;
@@ -94,7 +94,6 @@ use pocketmine\world\format\io\ChunkData;
 use pocketmine\world\format\io\exception\CorruptedChunkException;
 use pocketmine\world\format\io\GlobalBlockStateHandlers;
 use pocketmine\world\format\io\WritableWorldProvider;
-use pocketmine\world\format\LightArray;
 use pocketmine\world\format\SubChunk;
 use pocketmine\world\generator\executor\AsyncGeneratorExecutor;
 use pocketmine\world\generator\executor\GeneratorExecutor;
@@ -130,6 +129,7 @@ use function gettype;
 use function is_a;
 use function is_object;
 use function max;
+use function memory_get_usage;
 use function microtime;
 use function min;
 use function morton2d_decode;
@@ -2541,6 +2541,13 @@ class World implements ChunkManager{
 		}
 
 		if($blockClicked->getTypeId() === BlockTypeIds::AIR){
+			return false;
+		}
+
+		//Additional validation: ensure the item is valid before proceeding
+		//This prevents exploits where modified clients try to place blocks with invalid items
+		if($item->isNull() && $player !== null){
+			$player->getLogger()->debug("Cancelled useItemOn: item is null for player " . $player->getName());
 			return false;
 		}
 

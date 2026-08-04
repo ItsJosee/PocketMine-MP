@@ -99,6 +99,7 @@ use pocketmine\inventory\transaction\TransactionCancelledException;
 use pocketmine\inventory\transaction\TransactionValidationException;
 use pocketmine\item\ConsumableItem;
 use pocketmine\item\Durable;
+use pocketmine\item\Elytra;
 use pocketmine\item\enchantment\EnchantmentInstance;
 use pocketmine\item\enchantment\MeleeWeaponEnchantment;
 use pocketmine\item\Item;
@@ -282,6 +283,8 @@ class Player extends Human implements CommandSender, ChunkListener, IPlayer, Nev
 
 	/** @var bool[] map: raw UUID (string) => bool */
 	protected array $hiddenPlayers = [];
+
+	private ?Player $lastMessagedFrom = null;
 
 	protected float $moveRateLimit = 10 * self::MOVES_PER_TICK;
 	protected ?float $lastMovementProcess = null;
@@ -1177,6 +1180,14 @@ class Player extends Human implements CommandSender, ChunkListener, IPlayer, Nev
 		return $this->sleeping !== null;
 	}
 
+	public function getLastMessagedFrom() : ?Player{
+		return $this->lastMessagedFrom;
+	}
+
+	public function setLastMessagedFrom(?Player $player) : void{
+		$this->lastMessagedFrom = $player;
+	}
+
 	public function sleepOn(Vector3 $pos) : bool{
 		$pos = $pos->floor();
 		$b = $this->getWorld()->getBlock($pos);
@@ -1991,6 +2002,14 @@ class Player extends Human implements CommandSender, ChunkListener, IPlayer, Nev
 		if($this->canInteract($pos->add(0.5, 0.5, 0.5), $this->isCreative() ? self::MAX_REACH_DISTANCE_CREATIVE : self::MAX_REACH_DISTANCE_SURVIVAL)){
 			$this->broadcastAnimation(new ArmSwingAnimation($this), $this->getViewers());
 			$item = $this->inventory->getItemInHand(); //this is a copy of the real item
+
+			//Validate that the player actually has an item in hand before proceeding
+			//This prevents exploits where clients try to place blocks without having them
+			if($item->isNull()){
+				$this->logger->debug("Cancelled block interaction at $pos: player has no item in hand");
+				return false;
+			}
+
 			$oldItem = clone $item;
 			$returnedItems = [];
 			if($this->getWorld()->useItemOn($pos, $item, $face, $clickOffset, $this, true, $returnedItems)){
@@ -2175,6 +2194,12 @@ class Player extends Human implements CommandSender, ChunkListener, IPlayer, Nev
 	public function toggleGlide(bool $glide) : bool{
 		if($glide === $this->gliding){
 			return true;
+		}
+		if($glide){
+			$chestItem = $this->getArmorInventory()->getChestplate();
+			if(!$chestItem instanceof Elytra || $chestItem->isBroken()){
+				return false;
+			}
 		}
 		$ev = new PlayerToggleGlideEvent($this, $glide);
 		$ev->call();

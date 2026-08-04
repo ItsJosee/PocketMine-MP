@@ -34,6 +34,7 @@ use pocketmine\utils\Utils;
 use Symfony\Component\Filesystem\Path;
 use function array_merge;
 use function array_push;
+use function array_slice;
 use function date;
 use function fclose;
 use function fopen;
@@ -42,7 +43,10 @@ use function hrtime;
 use function implode;
 use function is_dir;
 use function mkdir;
+use function number_format;
 use function spl_object_id;
+use function sprintf;
+use function usort;
 use const PHP_EOL;
 
 /**

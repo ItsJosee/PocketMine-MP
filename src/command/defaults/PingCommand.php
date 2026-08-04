@@ -24,36 +24,39 @@ declare(strict_types=1);
 namespace pocketmine\command\defaults;
 
 use pocketmine\command\CommandSender;
-use pocketmine\command\utils\InvalidCommandSyntaxException;
-use pocketmine\console\ConsoleCommandSender;
-use pocketmine\lang\KnownTranslationFactory;
 use pocketmine\permission\DefaultPermissionNames;
 use pocketmine\player\Player;
 use pocketmine\utils\TextFormat;
 use function count;
-use function implode;
 
-class SayCommand extends VanillaCommand{
+class PingCommand extends VanillaCommand{
 
 	public function __construct(){
 		parent::__construct(
-			"say",
-			KnownTranslationFactory::pocketmine_command_say_description(),
-			KnownTranslationFactory::commands_say_usage(),
-			["broadcast"]
+			"ping",
+			"Shows the ping of a player, or yourself if no player is specified"
 		);
-		$this->setPermission(DefaultPermissionNames::COMMAND_SAY);
+		$this->setPermission(DefaultPermissionNames::COMMAND_PING);
 	}
 
 	public function execute(CommandSender $sender, string $commandLabel, array $args){
-		if(count($args) === 0){
-			throw new InvalidCommandSyntaxException();
+		if(count($args) > 0){
+			$player = $sender->getServer()->getPlayerExact($args[0]);
+			if($player === null){
+				$sender->sendMessage(TextFormat::RED . "Player \"" . $args[0] . "\" not found.");
+				return true;
+			}
+		}else{
+			if(!($sender instanceof Player)){
+				$sender->sendMessage(TextFormat::RED . "Please specify a player.");
+				return true;
+			}
+			$player = $sender;
 		}
 
-		$sender->getServer()->broadcastMessage(KnownTranslationFactory::chat_type_announcement(
-			$sender instanceof Player ? $sender->getDisplayName() : ($sender instanceof ConsoleCommandSender ? "Server" : $sender->getName()),
-			implode(" ", $args)
-		)->prefix(TextFormat::LIGHT_PURPLE));
+		$ping = $player->getNetworkSession()->getPing();
+		$sender->sendMessage(TextFormat::WHITE . $player->getDisplayName() . "'s ping: " . TextFormat::GREEN . $ping . " ms");
+
 		return true;
 	}
 }

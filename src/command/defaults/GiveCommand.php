@@ -26,6 +26,7 @@ namespace pocketmine\command\defaults;
 use pocketmine\command\Command;
 use pocketmine\command\CommandSender;
 use pocketmine\command\utils\InvalidCommandSyntaxException;
+use pocketmine\command\utils\SelectorParser;
 use pocketmine\item\LegacyStringToItemParser;
 use pocketmine\item\LegacyStringToItemParserException;
 use pocketmine\item\StringToItemParser;
@@ -34,6 +35,7 @@ use pocketmine\nbt\JsonNbtParser;
 use pocketmine\nbt\NbtDataException;
 use pocketmine\nbt\NbtException;
 use pocketmine\permission\DefaultPermissionNames;
+use pocketmine\player\Player;
 use pocketmine\utils\TextFormat;
 use function array_slice;
 use function count;
@@ -58,9 +60,25 @@ class GiveCommand extends VanillaCommand{
 			throw new InvalidCommandSyntaxException();
 		}
 
-		$player = $this->fetchPermittedPlayerTarget($sender, $args[0], DefaultPermissionNames::COMMAND_GIVE_SELF, DefaultPermissionNames::COMMAND_GIVE_OTHER);
-		if($player === null){
-			return true;
+		if(SelectorParser::isSelector($args[0])){
+			$senderPlayer = $sender instanceof Player ? $sender : null;
+			$entities = SelectorParser::parse($args[0], $senderPlayer);
+			$players = [];
+			foreach($entities as $entity){
+				if($entity instanceof Player){
+					$players[] = $entity;
+				}
+			}
+			if(count($players) === 0){
+				$sender->sendMessage(TextFormat::RED . "No matching players found.");
+				return true;
+			}
+		}else{
+			$player = $this->fetchPermittedPlayerTarget($sender, $args[0], DefaultPermissionNames::COMMAND_GIVE_SELF, DefaultPermissionNames::COMMAND_GIVE_OTHER);
+			if($player === null){
+				return true;
+			}
+			$players = [$player];
 		}
 
 		try{
@@ -97,14 +115,23 @@ class GiveCommand extends VanillaCommand{
 			}
 		}
 
-		//TODO: overflow
-		$player->getInventory()->addItem($item);
+		foreach($players as $p){
+			$p->getInventory()->addItem($item);
+		}
 
-		Command::broadcastCommandMessage($sender, KnownTranslationFactory::commands_give_success(
-			$item->getName() . " (" . $args[1] . ")",
-			(string) $item->getCount(),
-			$player->getName()
-		));
+		if(count($players) === 1){
+			Command::broadcastCommandMessage($sender, KnownTranslationFactory::commands_give_success(
+				$item->getName() . " (" . $args[1] . ")",
+				(string) $item->getCount(),
+				$players[0]->getName()
+			));
+		}else{
+			Command::broadcastCommandMessage($sender, KnownTranslationFactory::commands_give_success(
+				$item->getName() . " (" . $args[1] . ")",
+				(string) $item->getCount(),
+				count($players) . " players"
+			));
+		}
 		return true;
 	}
 }

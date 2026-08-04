@@ -26,6 +26,7 @@ namespace pocketmine\timings;
 use pocketmine\Server;
 use pocketmine\utils\AssumptionFailedError;
 use function floor;
+use function memory_get_usage;
 use function spl_object_id;
 
 /**

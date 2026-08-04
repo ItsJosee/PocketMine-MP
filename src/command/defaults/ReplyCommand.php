@@ -30,47 +30,42 @@ use pocketmine\lang\KnownTranslationFactory;
 use pocketmine\permission\DefaultPermissionNames;
 use pocketmine\player\Player;
 use pocketmine\utils\TextFormat;
-use function array_shift;
 use function count;
 use function implode;
 
-class TellCommand extends VanillaCommand{
+class ReplyCommand extends VanillaCommand{
 
 	public function __construct(){
 		parent::__construct(
-			"tell",
-			KnownTranslationFactory::pocketmine_command_tell_description(),
-			KnownTranslationFactory::commands_message_usage(),
-			["w", "msg"]
+			"r",
+			"Reply to the last private message",
+			"/r <message>"
 		);
 		$this->setPermission(DefaultPermissionNames::COMMAND_TELL);
 	}
 
 	public function execute(CommandSender $sender, string $commandLabel, array $args){
-		if(count($args) < 2){
+		if(count($args) === 0){
 			throw new InvalidCommandSyntaxException();
 		}
 
-		$player = $sender->getServer()->getPlayerByPrefix(array_shift($args));
-
-		if($player === $sender){
-			$sender->sendMessage(KnownTranslationFactory::commands_message_sameTarget()->prefix(TextFormat::RED));
+		if(!($sender instanceof Player)){
+			$sender->sendMessage(TextFormat::RED . "This command can only be used by players.");
 			return true;
 		}
 
-		if($player instanceof Player){
-			$message = implode(" ", $args);
-			$sender->sendMessage(KnownTranslationFactory::commands_message_display_outgoing($player->getDisplayName(), $message)->prefix(TextFormat::GRAY . TextFormat::ITALIC));
-			$name = $sender instanceof Player ? $sender->getDisplayName() : $sender->getName();
-			$player->sendMessage(KnownTranslationFactory::commands_message_display_incoming($name, $message)->prefix(TextFormat::GRAY . TextFormat::ITALIC));
-			Command::broadcastCommandMessage($sender, KnownTranslationFactory::commands_message_display_outgoing($player->getDisplayName(), $message), false);
-
-			if($sender instanceof Player){
-				$player->setLastMessagedFrom($sender);
-			}
-		}else{
-			$sender->sendMessage(KnownTranslationFactory::commands_generic_player_notFound());
+		$target = $sender->getLastMessagedFrom();
+		if($target === null || !$target->isOnline()){
+			$sender->sendMessage(TextFormat::RED . "No player to reply to.");
+			return true;
 		}
+
+		$message = implode(" ", $args);
+		$sender->sendMessage(KnownTranslationFactory::commands_message_display_outgoing($target->getDisplayName(), $message)->prefix(TextFormat::GRAY . TextFormat::ITALIC));
+		$target->sendMessage(KnownTranslationFactory::commands_message_display_incoming($sender->getDisplayName(), $message)->prefix(TextFormat::GRAY . TextFormat::ITALIC));
+		Command::broadcastCommandMessage($sender, KnownTranslationFactory::commands_message_display_outgoing($target->getDisplayName(), $message), false);
+
+		$target->setLastMessagedFrom($sender);
 
 		return true;
 	}

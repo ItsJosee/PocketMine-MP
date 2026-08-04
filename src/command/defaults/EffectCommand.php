@@ -25,10 +25,12 @@ namespace pocketmine\command\defaults;
 
 use pocketmine\command\CommandSender;
 use pocketmine\command\utils\InvalidCommandSyntaxException;
+use pocketmine\command\utils\SelectorParser;
 use pocketmine\entity\effect\EffectInstance;
 use pocketmine\entity\effect\StringToEffectParser;
 use pocketmine\lang\KnownTranslationFactory;
 use pocketmine\permission\DefaultPermissionNames;
+use pocketmine\player\Player;
 use pocketmine\utils\Limits;
 use pocketmine\utils\TextFormat;
 use function count;
@@ -53,16 +55,46 @@ class EffectCommand extends VanillaCommand{
 			throw new InvalidCommandSyntaxException();
 		}
 
-		$player = $this->fetchPermittedPlayerTarget($sender, $args[0], DefaultPermissionNames::COMMAND_EFFECT_SELF, DefaultPermissionNames::COMMAND_EFFECT_OTHER);
-		if($player === null){
-			return true;
+		if(SelectorParser::isSelector($args[0])){
+			$senderPlayer = $sender instanceof Player ? $sender : null;
+			$entities = SelectorParser::parse($args[0], $senderPlayer);
+			$players = [];
+			foreach($entities as $entity){
+				if($entity instanceof Player){
+					$players[] = $entity;
+				}
+			}
+			if(count($players) === 0){
+				$sender->sendMessage(TextFormat::RED . "No matching players found.");
+				return true;
+			}
+		}else{
+			$player = $this->fetchPermittedPlayerTarget($sender, $args[0], DefaultPermissionNames::COMMAND_EFFECT_SELF, DefaultPermissionNames::COMMAND_EFFECT_OTHER);
+			if($player === null){
+				return true;
+			}
+			$players = [$player];
 		}
-		$effectManager = $player->getEffects();
 
 		if(strtolower($args[1]) === "clear"){
-			$effectManager->clear();
+			if(isset($args[2]) && strtolower($args[2]) === "all"){
+				$count = 0;
+				foreach($sender->getServer()->getOnlinePlayers() as $p){
+					$p->getEffects()->clear();
+					$count++;
+				}
+				$sender->sendMessage("Cleared effects from " . $count . " players.");
+				return true;
+			}
 
-			$sender->sendMessage(KnownTranslationFactory::commands_effect_success_removed_all($player->getDisplayName()));
+			foreach($players as $p){
+				$p->getEffects()->clear();
+			}
+			if(count($players) === 1){
+				$sender->sendMessage(KnownTranslationFactory::commands_effect_success_removed_all($players[0]->getDisplayName()));
+			}else{
+				$sender->sendMessage("Cleared effects from " . count($players) . " players.");
+			}
 			return true;
 		}
 
@@ -104,27 +136,29 @@ class EffectCommand extends VanillaCommand{
 			}
 		}
 
-		if($duration === 0){
-			if(!$effectManager->has($effect)){
-				if(count($effectManager->all()) === 0){
-					$sender->sendMessage(KnownTranslationFactory::commands_effect_failure_notActive_all($player->getDisplayName()));
-				}else{
-					$sender->sendMessage(KnownTranslationFactory::commands_effect_failure_notActive($effect->getName(), $player->getDisplayName()));
+		foreach($players as $p){
+			$effectManager = $p->getEffects();
+			if($duration === 0){
+				if(!$effectManager->has($effect)){
+					continue;
 				}
-				return true;
-			}
-
-			$effectManager->remove($effect);
-			$sender->sendMessage(KnownTranslationFactory::commands_effect_success_removed($effect->getName(), $player->getDisplayName()));
-		}else{
-			$instance = new EffectInstance($effect, $duration, $amplification, $visible, infinite: $infinite);
-			$effectManager->add($instance);
-
-			if($infinite){
-				self::broadcastCommandMessage($sender, KnownTranslationFactory::commands_effect_success_infinite($effect->getName(), (string) $instance->getAmplifier(), $player->getDisplayName()));
+				$effectManager->remove($effect);
 			}else{
-				self::broadcastCommandMessage($sender, KnownTranslationFactory::commands_effect_success($effect->getName(), (string) $instance->getAmplifier(), $player->getDisplayName(), (string) ($instance->getDuration() / 20)));
+				$instance = new EffectInstance($effect, $duration, $amplification, $visible, infinite: $infinite);
+				$effectManager->add($instance);
 			}
+		}
+
+		if(count($players) === 1){
+			if($duration === 0){
+				$sender->sendMessage(KnownTranslationFactory::commands_effect_success_removed($effect->getName(), $players[0]->getDisplayName()));
+			}elseif($infinite){
+				self::broadcastCommandMessage($sender, KnownTranslationFactory::commands_effect_success_infinite($effect->getName(), (string) $amplification, $players[0]->getDisplayName()));
+			}else{
+				self::broadcastCommandMessage($sender, KnownTranslationFactory::commands_effect_success($effect->getName(), (string) $amplification, $players[0]->getDisplayName(), (string) ($duration / 20)));
+			}
+		}else{
+			$sender->sendMessage("Applied effect to " . count($players) . " players.");
 		}
 
 		return true;

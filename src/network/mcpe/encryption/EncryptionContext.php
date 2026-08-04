@@ -29,7 +29,6 @@ use function bin2hex;
 use function hash_final;
 use function hash_init;
 use function hash_update;
-use function openssl_error_string;
 use function strlen;
 use function substr;
 

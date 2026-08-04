@@ -69,7 +69,6 @@ use pocketmine\utils\ObjectSet;
 use function array_fill_keys;
 use function array_keys;
 use function array_map;
-use function array_search;
 use function count;
 use function get_class;
 use function implode;
@@ -509,6 +508,11 @@ class InventoryManager{
 		$clientSideItem = $inventoryEntry->predictions[$slot] ?? null;
 		if($clientSideItem === null || !$this->itemStacksEqual($currentItem, $clientSideItem)){
 			//no prediction or incorrect - do not associate this with the currently active itemstack request
+			//log for debugging desync issues
+			if($clientSideItem !== null){
+				$inventoryClass = (new \ReflectionClass($inventory))->getShortName();
+				$this->session->getLogger()->debug("Prediction mismatch in $inventoryClass#" . spl_object_id($inventory) . " slot $slot, forcing resync");
+			}
 			$this->trackItemStack($inventoryEntry, $slot, $currentItem, null);
 			$inventoryEntry->pendingSyncs[$slot] = $currentItem;
 		}else{
@@ -652,7 +656,10 @@ class InventoryManager{
 			$inventory = $entry->inventory;
 			foreach($entry->predictions as $slot => $expectedItem){
 				if(!$inventory->slotExists($slot) || $entry->itemStackInfos[$slot] === null){
-					continue; //TODO: size desync ???
+					//size desync detected - request full resync
+					$this->session->getLogger()->debug("Size desync detected in inventory " . get_class($inventory) . "#" . spl_object_id($inventory) . ", requesting full resync");
+					$this->requestSyncAll();
+					break;
 				}
 
 				//any prediction that still exists at this point is a slot that was predicted to change but didn't
