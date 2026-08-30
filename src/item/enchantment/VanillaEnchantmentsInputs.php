@@ -249,6 +249,35 @@ final class VanillaEnchantmentsInputs extends RegistrySource{
 			30
 		));
 
+		// Crossbow enchantments
+		self::register("QUICK_CHARGE", new Enchantment(
+			KnownTranslationFactory::enchantment_crossbowQuickCharge(),
+			Rarity::UNCOMMON,
+			0,
+			0,
+			3,
+			fn(int $level) : int => 12 * ($level - 1) + 5,
+			20
+		));
+		self::register("PIERCING", new Enchantment(
+			KnownTranslationFactory::enchantment_crossbowPiercing(),
+			Rarity::COMMON,
+			0,
+			0,
+			4,
+			fn(int $level) : int => 10 * ($level - 1) + 1,
+			15
+		));
+		self::register("MULTISHOT", new Enchantment(
+			KnownTranslationFactory::enchantment_crossbowMultishot(),
+			Rarity::RARE,
+			0,
+			0,
+			1,
+			fn(int $level) : int => 20,
+			30
+		));
+
 		self::register("MENDING", new Enchantment(
 			KnownTranslationFactory::enchantment_mending(),
 			Rarity::RARE,

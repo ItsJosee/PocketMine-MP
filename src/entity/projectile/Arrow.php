@@ -27,7 +27,9 @@ use pocketmine\block\Block;
 use pocketmine\entity\animation\ArrowShakeAnimation;
 use pocketmine\entity\Entity;
 use pocketmine\entity\EntitySizeInfo;
+use pocketmine\entity\Living;
 use pocketmine\entity\Location;
+use pocketmine\entity\object\EndCrystal;
 use pocketmine\event\entity\EntityItemPickupEvent;
 use pocketmine\event\entity\ProjectileHitEvent;
 use pocketmine\item\VanillaItems;
@@ -55,12 +57,15 @@ class Arrow extends Projectile{
 	private const TAG_PICKUP = "pickup"; //TAG_Byte
 	public const TAG_CRIT = "crit"; //TAG_Byte
 	private const TAG_LIFE = "life"; //TAG_Short
+	private const TAG_PIERCING = "piercing"; //TAG_Byte
 
 	protected float $damage = 2.0;
 	protected int $pickupMode = self::PICKUP_ANY;
 	protected float $punchKnockback = 0.0;
 	protected int $collideTicks = 0;
 	protected bool $critical = false;
+	protected int $piercingLevel = 0;
+	protected int $piercedEntities = 0;
 
 	public function __construct(Location $location, ?Entity $shootingEntity, bool $critical, ?CompoundTag $nbt = null){
 		parent::__construct($location, $shootingEntity, $nbt);
@@ -79,6 +84,7 @@ class Arrow extends Projectile{
 		$this->pickupMode = $nbt->getByte(self::TAG_PICKUP, self::PICKUP_ANY);
 		$this->critical = $nbt->getByte(self::TAG_CRIT, 0) === 1;
 		$this->collideTicks = $nbt->getShort(self::TAG_LIFE, $this->collideTicks);
+		$this->piercingLevel = $nbt->getByte(self::TAG_PIERCING, 0);
 	}
 
 	public function saveNBT() : CompoundTag{
@@ -86,6 +92,7 @@ class Arrow extends Projectile{
 		$nbt->setByte(self::TAG_PICKUP, $this->pickupMode);
 		$nbt->setByte(self::TAG_CRIT, $this->critical ? 1 : 0);
 		$nbt->setShort(self::TAG_LIFE, $this->collideTicks);
+		$nbt->setByte(self::TAG_PIERCING, $this->piercingLevel);
 		return $nbt;
 	}
 
@@ -113,6 +120,20 @@ class Arrow extends Projectile{
 
 	public function setPunchKnockback(float $punchKnockback) : void{
 		$this->punchKnockback = $punchKnockback;
+	}
+
+	public function getPiercingLevel() : int{
+		return $this->piercingLevel;
+	}
+
+	public function setPiercingLevel(int $piercingLevel) : void{
+		$this->piercingLevel = $piercingLevel;
+	}
+
+	public function canCollideWith(Entity $entity) : bool{
+		//arrows with the Piercing enchantment can pass through entities, so they must be able to collide with them even
+		//after being flagged as "on the ground"
+		return ($entity instanceof Living || $entity instanceof EndCrystal) && ($this->piercingLevel > 0 || !$this->onGround);
 	}
 
 	protected function entityBaseTick(int $tickDiff = 1) : bool{
@@ -146,7 +167,13 @@ class Arrow extends Projectile{
 	}
 
 	protected function onHitEntity(Entity $entityHit, RayTraceResult $hitResult) : void{
+		$this->piercedEntities++;
 		parent::onHitEntity($entityHit, $hitResult);
+		if($this->piercingLevel > 0 && $this->piercedEntities <= $this->piercingLevel){
+			//the arrow passes through the entity and keeps flying
+			$this->motion = $this->motion->multiply(0.9);
+			$this->broadcastAnimation(new ArrowShakeAnimation($this, 7));
+		}
 		if($this->punchKnockback > 0){
 			$horizontalSpeed = sqrt($this->motion->x ** 2 + $this->motion->z ** 2);
 			if($horizontalSpeed > 0){
@@ -154,6 +181,10 @@ class Arrow extends Projectile{
 				$entityHit->setMotion($entityHit->getMotion()->add($this->motion->x * $multiplier, 0.1, $this->motion->z * $multiplier));
 			}
 		}
+	}
+
+	protected function despawnsOnEntityHit() : bool{
+		return $this->piercingLevel <= 0 || $this->piercedEntities > $this->piercingLevel;
 	}
 
 	public function getPickupMode() : int{
